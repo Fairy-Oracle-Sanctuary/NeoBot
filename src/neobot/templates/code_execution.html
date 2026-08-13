@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Python代码执行结果</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;700&display=swap');
+        
+        :root {
+            --bg-color: #0f172a; /* 深蓝黑背景 */
+            --window-bg: rgba(30, 41, 59, 0.85); /* 窗口背景 */
+            --border-color: rgba(255, 255, 255, 0.08);
+            --accent: #6366f1; /* 核心强调色 - 靛蓝 */
+            --accent-glow: rgba(99, 102, 241, 0.4);
+            --text-title: #f8fafc;
+            --text-desc: #94a3b8;
+            --text-code: #a5f3fc; /* 代码高亮色 - 浅青 */
+            --code-bg: #0b1120; /* 代码块深色背景 */
+            --success-color: #10b981; /* 成功绿色 */
+            --error-color: #ef4444; /* 错误红色 */
+        }
+
+        * { 
+            margin: 0; 
+            padding: 0; 
+            box-sizing: border-box; 
+        }
+
+        body {
+            font-family: 'Noto Sans SC', system-ui, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-title);
+            display: flex;
+            justify-content: center;
+            padding: 0;
+            min-height: 100vh;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* 窗口容器 */
+        .window {
+            width: 100%;
+            min-height: 100vh;
+            background: var(--window-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-radius: 0;
+            border: none;
+            box-shadow: none;
+            overflow: auto;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 顶部标题栏 */
+        .header {
+            padding: 32px 40px;
+            border-bottom: 1px solid var(--border-color);
+            background: rgba(255, 255, 255, 0.02);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .dots { 
+            display: flex; 
+            gap: 8px; 
+        }
+        .dot { 
+            width: 12px; 
+            height: 12px; 
+            border-radius: 50%; 
+        }
+        .red { background: #ef4444; }
+        .yellow { background: #f59e0b; }
+        .green { background: #10b981; }
+
+        .title {
+            font-size: 18px;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            color: var(--text-desc);
+            text-transform: uppercase;
+        }
+
+        /* 内容区域 */
+        .content {
+            padding: 40px;
+            display: flex;
+            flex-direction: column;
+            gap: 32px;
+        }
+
+        .page-title {
+            margin-bottom: 10px;
+        }
+        .page-title h1 {
+            font-size: 48px;
+            background: linear-gradient(to right, #fff, #94a3b8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .page-title p {
+            color: var(--text-desc);
+            font-size: 20px;
+            margin-top: 12px;
+        }
+
+        /* 代码块卡片 */
+        .code-card {
+            background: var(--code-bg);
+            border-radius: 16px;
+            padding: 32px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+        }
+
+        .code-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .code-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--text-title);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .code-icon {
+            width: 24px;
+            height: 24px;
+            background: var(--accent);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .code-icon::before {
+            content: ">";
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+            color: white;
+        }
+
+        .code-content {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 18px;
+            line-height: 1.6;
+            color: var(--text-code);
+            white-space: pre-wrap;
+            word-break: break-all;
+            overflow-x: auto;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        /* 结果卡片 */
+        .result-card {
+            background: var(--code-bg);
+            border-radius: 16px;
+            padding: 32px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+        }
+
+        .result-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .result-title {
+            font-size: 20px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .result-success .result-title {
+            color: var(--success-color);
+        }
+
+        .result-error .result-title {
+            color: var(--error-color);
+        }
+
+        .result-icon {
+            width: 24px;
+            height: 24px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        .result-success .result-icon {
+            background: var(--success-color);
+            color: white;
+            content: "✓";
+        }
+
+        .result-error .result-icon {
+            background: var(--error-color);
+            color: white;
+            content: "✗";
+        }
+
+        .result-content {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 18px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            word-break: break-all;
+            overflow-x: auto;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .result-success .result-content {
+            color: var(--success-color);
+        }
+
+        .result-error .result-content {
+            color: var(--error-color);
+        }
+
+        /* 添加伪元素来显示图标 */
+        .result-success .result-icon::before {
+            content: "✓";
+        }
+
+        .result-error .result-icon::before {
+            content: "✗";
+        }
+
+        /* 用户信息区域 */
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        .user-avatar {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            font-weight: bold;
+            color: white;
+            background: var(--accent);
+            overflow: hidden;
+        }
+
+        .user-avatar img {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+
+        .user-details {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .user-name {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--text-title);
+        }
+
+        .execution-time {
+            font-size: 16px;
+            color: var(--text-desc);
+        }
+
+        /* 底部信息 */
+        .footer {
+            margin-top: auto;
+            padding: 32px;
+            border-top: 1px solid var(--border-color);
+            text-align: center;
+            color: var(--text-desc);
+            font-size: 14px;
+            background: rgba(0, 0, 0, 0.1);
+        }
+
+        .footer .info-row {
+            margin-bottom: 8px;
+        }
+
+        .footer .version-info {
+            font-size: 12px;
+            opacity: 0.8;
+            margin-top: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div class="window">
+        <div class="header">
+            <div class="dots">
+                <div class="dot red"></div>
+                <div class="dot yellow"></div>
+                <div class="dot green"></div>
+            </div>
+            <div class="title">Python代码执行</div>
+        </div>
+        
+        <div class="content">
+            <div class="page-title">
+                <h1>Python 代码执行结果</h1>
+                <p>{{ timestamp }}</p>
+            </div>
+            
+            <div class="user-info">
+                <div class="user-avatar">
+                    <img src="{{ qq_avatar_url }}" alt="Avatar" onerror="this.style.display='none'; this.parentElement.innerHTML='{{ avatar_initial }}'; this.parentElement.style.background='var(--accent)'">
+                </div>
+                <div class="user-details">
+                    <div class="user-name">{{ user_nickname }}</div>
+                    <div class="execution-time">执行时间: {{ execution_time }}</div>
+                </div>
+            </div>
+            
+            <div class="code-card">
+                <div class="code-header">
+                    <div class="code-title">
+                        <div class="code-icon"></div>
+                        <span>执行代码</span>
+                    </div>
+                </div>
+                <div class="code-content">{{ code }}</div>
+            </div>
+            
+            <div class="result-card {{ result_class }}">
+                <div class="result-header">
+                    <div class="result-title">
+                        <div class="result-icon"></div>
+                        <span>{{ result_title }}</span>
+                    </div>
+                </div>
+                <div class="result-content">{{ result }}</div>
+            </div>
+            
+            <div class="footer">
+                <div class="info-row">执行环境: DOCKER</div>
+                <div class="info-row">执行时间: {{ execution_time }}</div>
+                <div class="version-info">
+                    CalglauBot | Python {{ python_version }} | NeoBot Framework
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

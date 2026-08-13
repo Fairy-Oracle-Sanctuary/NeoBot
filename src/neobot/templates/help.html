@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CalglauBot Menu</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            /* 调整为更深邃、高对比度的配色 */
+            --bg-color: #0f172a; /* 深蓝黑背景 */
+            --window-bg: rgba(30, 41, 59, 0.85); /* 窗口背景，增加不透明度以提高文字可读性 */
+            --border-color: rgba(255, 255, 255, 0.08);
+            
+            --accent: #6366f1; /* 核心强调色 - 靛蓝 */
+            --accent-glow: rgba(99, 102, 241, 0.4);
+            
+            --text-title: #f8fafc;
+            --text-desc: #94a3b8;
+            --text-cmd: #a5f3fc; /* 指令高亮色 - 浅青 */
+            
+            --card-bg: rgba(0, 0, 0, 0.2);
+            --cmd-bg: #0b1120; /* 代码块深色背景 */
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Noto Sans SC', system-ui, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-title);
+            /* 居中布局 */
+            display: flex;
+            justify-content: center;
+            padding: 0;
+            min-height: 100vh;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* 窗口容器 */
+        .window {
+            width: 100%;
+            min-height: 100vh;
+            background: var(--window-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-radius: 0;
+            border: none;
+            box-shadow: none;
+            overflow: auto;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 顶部标题栏 */
+        .header {
+            padding: 32px 40px;
+            border-bottom: 1px solid var(--border-color);
+            background: rgba(255, 255, 255, 0.02);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .dots { display: flex; gap: 8px; }
+        .dot { width: 12px; height: 12px; border-radius: 50%; }
+        .red { background: #ef4444; }
+        .yellow { background: #f59e0b; }
+        .green { background: #10b981; }
+
+        .title {
+            font-size: 18px;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            color: var(--text-desc);
+            text-transform: uppercase;
+        }
+
+        /* 内容区域 */
+        .content {
+            padding: 40px;
+            display: flex;
+            flex-direction: column;
+            gap: 32px; /* 卡片之间的间距 */
+        }
+
+        .page-title {
+            margin-bottom: 10px;
+        }
+        .page-title h1 {
+            font-size: 48px;
+            background: linear-gradient(to right, #fff, #94a3b8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .page-title p {
+            color: var(--text-desc);
+            font-size: 20px;
+            margin-top: 12px;
+        }
+
+        /* 插件卡片 - 改为三列布局 */
+        .plugin-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 14px;
+            padding: 24px;
+            display: flex;
+            flex-direction: column; /* 垂直排列 */
+            gap: 16px;
+            transition: transform 0.2s;
+            position: relative;
+            overflow: hidden;
+            flex: 1;
+            min-width: 320px;
+        }
+
+        /* 左侧装饰线 */
+        .plugin-card::before {
+            content: '';
+            position: absolute;
+            left: 0; top: 0; bottom: 0;
+            width: 4px;
+            background: var(--accent);
+            opacity: 0.6;
+        }
+
+        /* 插件头部信息 */
+        .card-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+        }
+
+        .plugin-name {
+            font-size: 24px;
+            font-weight: 700;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        /* 装饰性Tag */
+        .plugin-tag {
+            font-size: 14px;
+            background: rgba(99, 102, 241, 0.2);
+            color: #818cf8;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .plugin-desc {
+            font-size: 18px;
+            color: var(--text-desc);
+            line-height: 1.6;
+            margin-top: 8px;
+        }
+
+        /* 指令代码块 - 核心修改区域 */
+        .cmd-block {
+            background: var(--cmd-bg);
+            border-radius: 10px;
+            padding: 20px;
+            border: 1px solid var(--border-color);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 16px;
+            line-height: 1.8;
+            color: var(--text-cmd);
+            
+            /* 处理长文本的关键 CSS */
+            white-space: pre-wrap;      /* 保留换行符，且允许自动换行 */
+            word-wrap: break-word;      /* 允许长单词换行 */
+            overflow-wrap: break-word;  /* 标准写法 */
+            word-break: break-word;     /* 兼容性写法 */
+        }
+        
+        /* 模拟终端提示符 */
+        .cmd-block::before {
+            content: '$ ';
+            color: #64748b;
+            user-select: none;
+        }
+        
+        /* 插件网格布局 */
+        .plugin-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 24px;
+            justify-content: flex-start;
+            width: 100%;
+        }
+
+        /* 页脚 */
+        .footer {
+            margin-top: auto;
+            padding: 32px 40px;
+            border-top: 1px solid var(--border-color);
+            background: rgba(0, 0, 0, 0.1);
+            color: var(--text-desc);
+            font-size: 14px;
+            text-align: center;
+            letter-spacing: 1px;
+        }
+
+        .footer .info-row {
+            margin-bottom: 8px;
+        }
+
+        .footer .version-info {
+            font-size: 12px;
+            opacity: 0.8;
+            margin-top: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div class="window">
+        <!-- 窗口栏 -->
+        <div class="header">
+            <div class="dots">
+                <div class="dot red"></div>
+                <div class="dot yellow"></div>
+                <div class="dot green"></div>
+            </div>
+            <div class="title">NeoBot System</div>
+        </div>
+
+        <div class="content">
+            <!-- 标题 -->
+            <div class="page-title">
+                <h1>功能中心</h1>
+                <p>Dashboard & Command List · {{ plugins|length }} Modules Loaded</p>
+            </div>
+
+            <!-- 插件列表 - 三列流式布局 -->
+            <div class="plugin-grid">
+            {% for plugin in plugins %}
+            <div class="plugin-card">
+                <div class="card-top">
+                    <div class="plugin-name">
+                        {{ plugin.name }}
+                        <span class="plugin-tag">Plugin</span>
+                    </div>
+                    <div class="plugin-desc">
+                        {{ plugin.description }}
+                    </div>
+                </div>
+                
+                <!-- 代码块：宽度占满容器，高度自适应 -->
+                <div class="cmd-block">{{ plugin.usage }}</div>
+            </div>
+            {% endfor %}
+            </div>
+        </div>
+
+        <div class="footer">
+            <div class="info-row">NeoBot System - 功能中心</div>
+            <div class="info-row">已加载 {{ plugins|length }} 个模块</div>
+            <div class="version-info">
+                CalglauBot | Powered by NeoBot Framework
+            </div>
+        </div>
+    </div>
+</body>
+</html>

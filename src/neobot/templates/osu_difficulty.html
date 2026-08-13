@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>osu! Beatmap Card</title>
+    <style>
+        :root {
+            --bg: #121220;
+            --card-bg: #1a1a2e;
+            --accent: #e91e63;
+            --accent2: #2196f3;
+            --text: #e0e0e0;
+            --text-dim: #999;
+            --text-bright: #fff;
+            --ghost: #ff6b35;
+            --pp: #4fc3f7;
+            --normal: #66bb6a;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Noto Sans SC', system-ui, -apple-system, sans-serif;
+            background: var(--bg);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 24px;
+        }
+
+        .card {
+            width: 100%;
+            background: var(--card-bg);
+            border-radius: 24px;
+            display: flex;
+            overflow: hidden;
+            box-shadow: 0 16px 64px rgba(0,0,0,0.6);
+        }
+
+        .cover-section {
+            width: 540px;
+            flex-shrink: 0;
+            background: #0d0d1a;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .cover-section img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .cover-placeholder {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #1a1a2e 0%, #252547 100%);
+            color: #444;
+            font-size: 96px;
+        }
+
+        .info-section {
+            flex: 1;
+            padding: 56px 72px;
+            display: flex;
+            flex-direction: column;
+            gap: 36px;
+            min-width: 0;
+        }
+
+        .header-row {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .type-badge {
+            padding: 10px 24px;
+            border-radius: 8px;
+            font-size: 20px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            white-space: nowrap;
+        }
+
+        .badge-ghost { background: rgba(255,107,53,0.15); color: var(--ghost); }
+        .badge-pp { background: rgba(79,195,247,0.15); color: var(--pp); }
+        .badge-normal { background: rgba(102,187,106,0.15); color: var(--normal); }
+        .badge-sv { background: rgba(255,193,7,0.15); color: #ffc107; }
+        .badge-speed { background: rgba(156,39,176,0.15); color: #ce93d8; }
+
+        .title {
+            font-size: 38px;
+            font-weight: 700;
+            color: var(--text-bright);
+            line-height: 1.25;
+            word-break: break-all;
+        }
+
+        .artist {
+            font-size: 24px;
+            color: var(--text-dim);
+        }
+
+        .mapper {
+            font-size: 18px;
+            color: var(--text-dim);
+        }
+
+        .sr-comparison {
+            display: flex;
+            gap: 36px;
+        }
+
+        .sr-box {
+            flex: 1;
+            background: rgba(255,255,255,0.04);
+            border-radius: 20px;
+            padding: 36px 40px;
+            text-align: center;
+        }
+
+        .sr-box .label {
+            font-size: 18px;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            margin-bottom: 14px;
+        }
+
+        .sr-box .value {
+            font-size: 72px;
+            font-weight: 700;
+            color: var(--text-bright);
+            line-height: 1;
+        }
+
+        .sr-box .value.official { color: #999; }
+        .sr-box .value.recalc { color: var(--accent); }
+
+        .sr-delta {
+            font-size: 22px;
+            margin-top: 10px;
+        }
+
+        .delta-ghost { color: var(--ghost); }
+        .delta-pp { color: var(--pp); }
+        .delta-normal { color: var(--normal); }
+
+        .meta-row {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .meta-chip {
+            background: rgba(255,255,255,0.06);
+            border-radius: 8px;
+            padding: 10px 20px;
+            font-size: 16px;
+            color: var(--text);
+            white-space: nowrap;
+        }
+
+        .meta-chip .chip-label {
+            color: var(--text-dim);
+            margin-right: 6px;
+        }
+
+        .dan-row {
+            display: flex;
+            gap: 20px;
+        }
+
+        .dan-section {
+            flex: 1;
+            padding: 20px 28px;
+            background: rgba(255,255,255,0.04);
+            border-radius: 16px;
+            border-left: 5px solid var(--accent2);
+        }
+
+        .dan-section.ln {
+            border-left-color: #ab47bc;
+        }
+
+        .dan-label {
+            font-size: 14px;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 6px;
+        }
+
+        .dan-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--accent2);
+        }
+
+        .dan-section.ln .dan-value {
+            color: #ab47bc;
+        }
+
+        .dan-sub {
+            font-size: 16px;
+            color: var(--text-dim);
+            margin-top: 4px;
+        }
+
+        .footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-top: 16px;
+            border-top: 1px solid rgba(255,255,255,0.06);
+        }
+
+        .footer-credit {
+            font-size: 14px;
+            color: #555;
+        }
+
+        .footer-time {
+            font-size: 14px;
+            color: #555;
+        }
+
+        .graph-section {
+            padding: 14px 20px;
+            background: rgba(255,255,255,0.03);
+            border-radius: 14px;
+        }
+
+        .graph-label {
+            font-size: 14px;
+            color: var(--text-dim);
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+
+        .graph-svg {
+            width: 100%;
+            height: 160px;
+            display: block;
+        }
+
+        .graph-svg .graph-line {
+            fill: none;
+            stroke: var(--accent);
+            stroke-width: 2;
+            stroke-linejoin: round;
+        }
+
+        .graph-svg .graph-fill {
+            fill: url(#graphGradient);
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="cover-section">
+            {% if cover_url %}
+            <img src="{{ cover_url }}" alt="cover" />
+            {% else %}
+            <div class="cover-placeholder">🎵</div>
+            {% endif %}
+        </div>
+
+        <div class="info-section">
+            <div class="header-row">
+                    <span class="type-badge {{ badge_class }}">{{ map_type_emoji }} {{ map_type }}</span>
+                    {% if speed_label %}
+                    <span class="type-badge badge-speed">{{ speed_label }}</span>
+                    {% endif %}
+                    {% if pattern_category %}
+                    <span class="type-badge {{ badge_class }}">{{ pattern_category }}</span>
+                    {% endif %}
+                    {% if is_sv_heavy %}
+                    <span class="type-badge badge-sv">⚠️ SV谱</span>
+                    {% endif %}
+                </div>
+
+            <div class="title">{{ title }} [{{ version }}]</div>
+            <div>
+                <div class="artist">{{ artist }}</div>
+                <div class="mapper">by {{ mapper }}</div>
+            </div>
+
+            <div class="sr-comparison">
+                <div class="sr-box">
+                    <div class="label">官方 SR</div>
+                    <div class="value official">{{ official_sr_fmt }}</div>
+                </div>
+                <div class="sr-box">
+                    <div class="label">{{ sr_label }}</div>
+                    <div class="value recalc">{{ recalc_sr_fmt }}</div>
+                    {% if sr_deviation != 0.0 %}
+                    <div class="sr-delta {{ delta_class }}">{{ sr_deviation_fmt }}</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="meta-row">
+                <div class="meta-chip"><span class="chip-label">BPM</span> {{ bpm }}</div>
+                <div class="meta-chip"><span class="chip-label">键位</span> {{ keys }}K</div>
+                <div class="meta-chip"><span class="chip-label">LN</span> {{ ln_pct }}</div>
+                <div class="meta-chip"><span class="chip-label">模式</span> {{ mode_tag }}</div>
+                <div class="meta-chip"><span class="chip-label">难度</span> {{ est_diff }}</div>
+                {% if numeric_difficulty is not none %}
+                <div class="meta-chip"><span class="chip-label">标度</span> {{ numeric_difficulty }}</div>
+                {% endif %}
+            </div>
+
+            <div class="dan-row">
+                <div class="dan-section">
+                    <div class="dan-label">RC Dan</div>
+                    <div class="dan-value">{{ rc_dan }}</div>
+                    {% if rc_numeric is not none %}
+                    <div class="dan-sub">标度: {{ rc_numeric }}</div>
+                    {% endif %}
+                </div>
+                <div class="dan-section ln">
+                    <div class="dan-label">LN Dan</div>
+                    <div class="dan-value">{{ ln_dan }}</div>
+                </div>
+            </div>
+
+            {% if has_graph and graph_json %}
+            <div class="graph-section">
+                <div class="graph-label">📈 难度变化</div>
+                <svg class="graph-svg" viewBox="0 0 1150 160" preserveAspectRatio="xMidYMid meet" id="diffGraph">
+                    <defs>
+                        <linearGradient id="graphGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stop-color="#e91e63" stop-opacity="0.30"/>
+                            <stop offset="100%" stop-color="#e91e63" stop-opacity="0.02"/>
+                        </linearGradient>
+                    </defs>
+                </svg>
+            </div>
+            {% endif %}
+
+            <div class="footer">
+                <div class="footer-credit">难度引擎: osumania_map_analyser (Node.js)</div>
+                <div class="footer-time">{{ elapsed_ms }}</div>
+            </div>
+        </div>
+    </div>
+    {% if has_graph and graph_json %}
+    <script>
+    (function() {
+        var raw = {{ graph_json }};
+        if (!raw || !raw.times || !raw.values || raw.times.length < 2) return;
+
+        var times = raw.times;
+        var values = raw.values;
+        var n = Math.min(times.length, values.length);
+
+        var svg = document.getElementById('diffGraph');
+        var padX = 10, padY = 15;
+        var w = 1150, h = 160;
+        var chartW = w - padX * 2, chartH = h - padY * 2;
+        var baseY = h - padY;
+
+        var tMin = times[0], tMax = times[n - 1];
+        var vMin = values[0], vMax = values[0];
+        for (var i = 0; i < n; i++) {
+            if (values[i] < vMin) vMin = values[i];
+            if (values[i] > vMax) vMax = values[i];
+        }
+        if (vMax - vMin < 0.001) { vMax = vMin + 1; }
+
+        var tRange = tMax - tMin || 1;
+        var vRange = vMax - vMin;
+
+        var points = [];
+        for (var i = 0; i < n; i++) {
+            var x = padX + ((times[i] - tMin) / tRange) * chartW;
+            var y = baseY - ((values[i] - vMin) / vRange) * chartH;
+            points.push(x.toFixed(1) + ',' + y.toFixed(1));
+        }
+
+        var polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+        polyline.setAttribute('points', points.join(' '));
+        polyline.setAttribute('fill', 'none');
+        polyline.setAttribute('stroke', '#e91e63');
+        polyline.setAttribute('stroke-width', '2.5');
+        polyline.setAttribute('stroke-linejoin', 'round');
+
+        var areaPoints = padX + ',' + baseY + ' ' + points.join(' ') + ' ' + (padX + chartW) + ',' + baseY;
+        var area = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+        area.setAttribute('points', areaPoints);
+        area.setAttribute('fill', 'url(#graphGradient)');
+
+        svg.appendChild(area);
+        svg.appendChild(polyline);
+    })();
+    </script>
+    {% endif %}
+</body>
+</html>

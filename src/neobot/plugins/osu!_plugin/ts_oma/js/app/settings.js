@@ -1,0 +1,789 @@
+import {
+    APP_CONFIG,
+    bodyGraphWrapEl,
+    dashboardEl,
+    ettSkillBarsEl,
+    getActiveContentBar,
+    hasAnyGraphModeEnabled,
+    mainCardEl,
+    parseAutoModeValue,
+    parseCardBlurValue,
+    parseCardOpacityValue,
+    parseCardRadiusValue,
+    parseContentBarValue,
+    parseDebugUseAmountValue,
+    parseDiffTextValue,
+    parseEnableEtternaRainbowBarsValue,
+    parseEnableStatusMarqueeValue,
+    parseEnablePauseDetectionValue,
+    parsePauseDetectionThresholdValue,
+    parseEstimatorAlgorithmValue,
+    parseAzusaSunnyReferenceHoValue,
+    parseEtternaVersionValue,
+    parseCompanellaEtternaVersionValue,
+    parseEnableNumericDifficultyValue,
+    parseHideCardDuringPlayValue,
+    parseShowModeTagCapsuleValue,
+    parseEnableUpdateCheckValue,
+    parseReverseCardExtendDirectionValue,
+    parseSrTextValue,
+    parseSvDetectionValue,
+    parseVibroDetectionValue,
+    parseWsEndpointValue,
+    patternClustersEl,
+    reworkStarEl,
+    socket,
+    state,
+    SETTINGS_COMMAND_TIMEOUT_MS,
+    titleIconEl,
+} from "./appContext.js";
+import {
+    normalizeBooleanSetting,
+    normalizeCardBlurValue,
+    normalizeCardOpacityValue,
+    normalizeCardRadiusValue,
+    normalizeContentBarValue,
+    normalizeDiffTextValue,
+    normalizeEtternaVersionValue,
+    normalizeEstimatorAlgorithmValue,
+    normalizeWsEndpointValue,
+    normalizeSrTextValue,
+} from "../parser/settingsParser.js";
+import {
+    clearDiffGraph,
+    redrawPauseMarkers,
+    setGraphCursorVisible,
+    updateDiffTextVisibility,
+} from "./graph.js";
+import {
+    updateCardPlayVisibility,
+    updateModeTagVisibility,
+    updatePauseCountVisibility,
+    refreshStatusRendering,
+} from "./hud.js";
+import { resolveAutoDisplayProfile } from "./modeLogic.js";
+import { scheduleRecompute } from "./scheduler.js";
+import { runUpdateCheckIfDue, runUpdateCheckNow } from "./updateChecker.js";
+
+function isAutoDisplayEnabled() {
+    return state.userSrText === "Auto" || state.userContentBar === "Auto";
+}
+
+function resolveRuntimeDisplayProfile(modeTag = state.currentModeTag || "Mix") {
+    const auto = resolveAutoDisplayProfile(modeTag);
+    return {
+        contentBar: state.userContentBar === "Auto" ? auto.contentBar : state.userContentBar,
+        srText: state.userSrText === "Auto" ? auto.srText : state.userSrText,
+        diffText: state.userDiffText,
+    };
+}
+
+function updateContentBarVisibility() {
+    const activeContentBar = getActiveContentBar();
+
+    patternClustersEl.hidden = activeContentBar !== "Pattern";
+    ettSkillBarsEl.hidden = activeContentBar !== "Etterna";
+    if (bodyGraphWrapEl) {
+        bodyGraphWrapEl.hidden = activeContentBar !== "Graph";
+    }
+
+    mainCardEl.classList.toggle("bars-pattern", activeContentBar === "Pattern");
+    mainCardEl.classList.toggle("bars-etterna", activeContentBar === "Etterna");
+    mainCardEl.classList.toggle("bars-graph", activeContentBar === "Graph");
+    mainCardEl.classList.toggle("bars-none", activeContentBar === "None");
+
+    if (activeContentBar !== "Etterna") {
+        mainCardEl.classList.remove("bars-etterna-compact");
+    }
+}
+
+let cardHeightTransitionTimerId = 0;
+let cardHeightTransitionEndHandler = null;
+
+function clearCardHeightTransitionState() {
+    if (!mainCardEl) {
+        return;
+    }
+
+    if (cardHeightTransitionTimerId) {
+        clearTimeout(cardHeightTransitionTimerId);
+        cardHeightTransitionTimerId = 0;
+    }
+
+    if (cardHeightTransitionEndHandler) {
+        mainCardEl.removeEventListener("transitionend", cardHeightTransitionEndHandler);
+        cardHeightTransitionEndHandler = null;
+    }
+
+    mainCardEl.style.removeProperty("height");
+}
+
+function animateCardHeightTransition(previousHeight) {
+    if (!mainCardEl) {
+        clearCardHeightTransitionState();
+        return;
+    }
+
+    if (typeof window !== "undefined"
+        && typeof window.matchMedia === "function"
+        && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        clearCardHeightTransitionState();
+        return;
+    }
+
+    const fromHeight = Number(previousHeight);
+    const toHeight = Number(mainCardEl.getBoundingClientRect().height) || 0;
+    if (!Number.isFinite(fromHeight) || !Number.isFinite(toHeight)) {
+        clearCardHeightTransitionState();
+        return;
+    }
+
+    if (Math.abs(toHeight - fromHeight) < 1) {
+        clearCardHeightTransitionState();
+        return;
+    }
+
+    clearCardHeightTransitionState();
+    mainCardEl.style.height = `${fromHeight}px`;
+    void mainCardEl.offsetHeight;
+    mainCardEl.style.height = `${toHeight}px`;
+
+    const cleanup = () => {
+        clearCardHeightTransitionState();
+    };
+
+    cardHeightTransitionEndHandler = (event) => {
+        if (event.target !== mainCardEl || event.propertyName !== "height") {
+            return;
+        }
+        cleanup();
+    };
+
+    mainCardEl.addEventListener("transitionend", cardHeightTransitionEndHandler);
+    cardHeightTransitionTimerId = setTimeout(cleanup, 420);
+}
+
+function applyVisualStyleSettings() {
+    const opacityMap = {
+        "100%": "1",
+        "95%": "0.95",
+        "90%": "0.9",
+        "80%": "0.8",
+        "70%": "0.7",
+    };
+    const blurMap = {
+        Off: "0px",
+        Soft: "6px",
+        Strong: "12px",
+    };
+    const radiusMap = {
+        Small: "12px",
+        Medium: "16px",
+        Large: "22px",
+    };
+
+    const opacity = opacityMap[state.cardOpacity] || opacityMap[APP_CONFIG.defaults.cardOpacity] || "0.95";
+    const blur = blurMap[state.cardBlur] || blurMap[APP_CONFIG.defaults.cardBlur] || "6px";
+    const radius = radiusMap[state.cardRadius] || radiusMap[APP_CONFIG.defaults.cardRadius] || "16px";
+    const shouldShowUpdateIcon = Boolean(state.enableUpdateCheck && state.hasAvailableUpdate);
+
+    if (mainCardEl) {
+        mainCardEl.style.setProperty("--card-opacity", opacity);
+        mainCardEl.style.setProperty("--card-backdrop-blur", blur);
+        mainCardEl.style.setProperty("--card-radius", radius);
+        mainCardEl.style.setProperty("--card-extend-origin", state.reverseCardExtendDirection ? "bottom" : "top");
+        mainCardEl.classList.toggle("hide-title-icon", !shouldShowUpdateIcon);
+    }
+
+    if (dashboardEl) {
+        dashboardEl.classList.toggle("extend-upward", state.reverseCardExtendDirection);
+    }
+
+    if (titleIconEl) {
+        titleIconEl.hidden = !shouldShowUpdateIcon;
+        titleIconEl.style.display = shouldShowUpdateIcon ? "" : "none";
+    }
+
+}
+
+function getCurrentAppVersion() {
+    if (typeof window !== "undefined" && typeof window.__MMA_VERSION === "string") {
+        return window.__MMA_VERSION;
+    }
+    return "0.0.0";
+}
+
+function applyAvailableUpdateState(hasUpdate) {
+    const next = Boolean(hasUpdate);
+    const changed = state.hasAvailableUpdate !== next;
+    state.hasAvailableUpdate = next;
+    applyVisualStyleSettings();
+    return changed;
+}
+
+function startUpdateCheckIfEnabled(force = false) {
+    const runner = force ? runUpdateCheckNow : runUpdateCheckIfDue;
+    runner({
+        enabled: state.enableUpdateCheck,
+        currentVersion: getCurrentAppVersion(),
+        onResult: ({ hasUpdate }) => {
+            applyAvailableUpdateState(hasUpdate);
+        },
+    });
+}
+
+export function getCounterPathForCommand() {
+    if (typeof window.COUNTER_PATH === "string" && window.COUNTER_PATH.trim().length > 0) {
+        return encodeURI(window.COUNTER_PATH);
+    }
+
+    const fallbackPath = `${window.location.pathname || "/"}${window.location.search || ""}`;
+    return encodeURI(fallbackPath);
+}
+
+export function applyDebugUseAmountSetting(value) {
+    const changed = state.debugUseAmount !== value;
+    state.debugUseAmount = value;
+    return changed;
+}
+
+export function applyUseSvDetectionSetting(value) {
+    const next = normalizeBooleanSetting(value, APP_CONFIG.defaults.useSvDetection);
+    const changed = state.useSvDetection !== next;
+    state.useSvDetection = next;
+    return changed;
+}
+
+export function applyWsEndpointSetting(value) {
+    const next = normalizeWsEndpointValue(value, APP_CONFIG.defaults.wsEndpoint || APP_CONFIG.socketHost);
+    const changed = state.wsEndpoint !== next;
+    state.wsEndpoint = next;
+
+    if (changed && socket && typeof socket.setHost === "function") {
+        socket.setHost(next, true);
+    }
+
+    return changed;
+}
+
+export function setRuntimeContentBar(contentBar) {
+    const previousCardHeight = mainCardEl ? (Number(mainCardEl.getBoundingClientRect().height) || 0) : 0;
+    const normalized = normalizeContentBarValue(contentBar);
+    const nextBar = (!normalized || normalized === "Auto") ? "Pattern" : normalized;
+    const changed = state.contentBar !== nextBar;
+    state.contentBar = nextBar;
+
+    const activeContentBar = getActiveContentBar();
+
+    if (activeContentBar !== "Pattern") {
+        patternClustersEl.innerHTML = "";
+    } else if (!patternClustersEl.innerHTML.trim()) {
+        patternClustersEl.innerHTML = "<li class=\"cluster-item empty\">No data</li>";
+    }
+
+    if (activeContentBar !== "Etterna") {
+        ettSkillBarsEl.innerHTML = "";
+    } else if (!ettSkillBarsEl.innerHTML.trim()) {
+        ettSkillBarsEl.innerHTML = "<li class=\"ett-skill-item empty\">No data</li>";
+    }
+
+    updateContentBarVisibility();
+    animateCardHeightTransition(previousCardHeight);
+    if (!hasAnyGraphModeEnabled()) {
+        clearDiffGraph();
+    } else {
+        setGraphCursorVisible(false);
+    }
+    return changed;
+}
+
+export function setEffectiveContentBarForMap(contentBarOrNull) {
+    const previousCardHeight = mainCardEl ? (Number(mainCardEl.getBoundingClientRect().height) || 0) : 0;
+    const normalized = normalizeContentBarValue(contentBarOrNull);
+    const next = (!normalized || normalized === "Auto") ? null : normalized;
+    const changed = state.effectiveContentBar !== next;
+    state.effectiveContentBar = next;
+
+    const activeContentBar = getActiveContentBar();
+    if (activeContentBar !== "Pattern") {
+        patternClustersEl.innerHTML = "";
+    }
+    if (activeContentBar !== "Etterna") {
+        ettSkillBarsEl.innerHTML = "";
+    }
+
+    updateContentBarVisibility();
+    animateCardHeightTransition(previousCardHeight);
+    if (!hasAnyGraphModeEnabled()) {
+        clearDiffGraph();
+    } else {
+        setGraphCursorVisible(false);
+    }
+
+    return changed;
+}
+
+export function setRuntimeSrText(srText) {
+    const normalized = normalizeSrTextValue(srText);
+    const nextText = (!normalized || normalized === "Auto") ? "ReworkSR" : normalized;
+    const changed = state.srText !== nextText;
+    state.srText = nextText;
+    if (reworkStarEl) {
+        reworkStarEl.classList.toggle("sr-reworksr", nextText === "ReworkSR");
+    }
+    return changed;
+}
+
+export function setRuntimeDiffText(value) {
+    const next = normalizeDiffTextValue(value) || "Difficulty";
+    const changed = state.diffText !== next;
+    state.diffText = next;
+    updateDiffTextVisibility();
+    return changed;
+}
+
+export function setRuntimeDisplayProfile(profile) {
+    const contentChanged = setRuntimeContentBar(profile.contentBar);
+    const srChanged = setRuntimeSrText(profile.srText);
+    const diffChanged = profile.diffText == null ? false : setRuntimeDiffText(profile.diffText);
+    return contentChanged || srChanged || diffChanged;
+}
+
+export function refreshAutoDisplayProfile(modeTag = state.currentModeTag || "Mix") {
+    const profile = resolveRuntimeDisplayProfile(modeTag);
+    return setRuntimeDisplayProfile(profile);
+}
+
+export function applyContentBarSetting(contentBar) {
+    const nextBar = normalizeContentBarValue(contentBar) || "Pattern";
+    const changed = state.userContentBar !== nextBar;
+    state.userContentBar = nextBar;
+
+    if (state.userContentBar === "Auto") {
+        refreshAutoDisplayProfile();
+    } else {
+        setRuntimeContentBar(state.userContentBar);
+    }
+
+    return changed;
+}
+
+export function applySrTextSetting(srText) {
+    const nextText = normalizeSrTextValue(srText) || "ReworkSR";
+    const changed = state.userSrText !== nextText;
+    state.userSrText = nextText;
+
+    if (state.userSrText === "Auto") {
+        refreshAutoDisplayProfile();
+    } else {
+        setRuntimeSrText(state.userSrText);
+    }
+
+    return changed;
+}
+
+export function applyDiffTextSetting(value) {
+    const next = normalizeDiffTextValue(value) || "Difficulty";
+    const changed = state.userDiffText !== next;
+    state.userDiffText = next;
+
+    setRuntimeDiffText(next);
+
+    return changed;
+}
+
+export function applyEstimatorAlgorithmSetting(value) {
+    const next = normalizeEstimatorAlgorithmValue(value) || APP_CONFIG.defaults.estimatorAlgorithm;
+    const changed = state.estimatorAlgorithm !== next;
+    state.estimatorAlgorithm = next;
+    return changed;
+}
+
+export function applyAzusaSunnyReferenceHoSetting(value) {
+    const next = normalizeBooleanSetting(value, APP_CONFIG.defaults.azusaSunnyReferenceHo);
+    const changed = state.azusaSunnyReferenceHo !== next;
+    state.azusaSunnyReferenceHo = next;
+    return changed;
+}
+
+export function applyEtternaVersionSetting(value) {
+    const next = normalizeEtternaVersionValue(value) || APP_CONFIG.defaults.etternaVersion;
+    const changed = state.etternaVersion !== next;
+    state.etternaVersion = next;
+    return changed;
+}
+
+export function applyCompanellaEtternaVersionSetting(value) {
+    const next = normalizeEtternaVersionValue(value) || APP_CONFIG.defaults.companellaEtternaVersion;
+    const changed = state.companellaEtternaVersion !== next;
+    state.companellaEtternaVersion = next;
+    return changed;
+}
+
+export function applyPauseDetectionSetting(value) {
+    const next = normalizeBooleanSetting(value, APP_CONFIG.defaults.pauseDetectionEnabled);
+    const changed = state.pauseDetectionEnabled !== next;
+    state.pauseDetectionEnabled = next;
+
+    if (!state.pauseDetectionEnabled) {
+        state.isPaused = false;
+        state.pauseTimeMs = 0;
+        state.frozenInterpMs = 0;
+        state.pauseFreezeStartRealMs = 0;
+        state.pauseFreezeSongTimeMs = 0;
+        state.pauseMarkerTimes = [];
+        state.pauseCount = 0;
+    } else if (!Number.isFinite(state.frozenInterpMs)) {
+        state.frozenInterpMs = state.songTimeMs;
+    }
+
+    updatePauseCountVisibility();
+    redrawPauseMarkers();
+    return changed;
+}
+
+export function applyPauseDetectionThresholdSetting(value) {
+    const num = Number(value);
+    const next = (Number.isFinite(num) && num > 0) ? Math.round(num) : APP_CONFIG.defaults.pauseDetectionThresholdMs;
+    const changed = state.pauseDetectionThresholdMs !== next;
+    state.pauseDetectionThresholdMs = next;
+    return changed;
+}
+
+export function applyVibroDetectionSetting(value) {
+    const next = normalizeBooleanSetting(value, APP_CONFIG.defaults.vibroDetection);
+    const changed = state.vibroDetection !== next;
+    state.vibroDetection = next;
+    return changed;
+}
+
+export function applyEnableEtternaRainbowBarsSetting(value) {
+    const next = normalizeBooleanSetting(value, APP_CONFIG.defaults.enableEtternaRainbowBars);
+    const changed = state.enableEtternaRainbowBars !== next;
+    state.enableEtternaRainbowBars = next;
+    return changed;
+}
+
+export function applyEnableStatusMarqueeSetting(value) {
+    const next = normalizeBooleanSetting(value, APP_CONFIG.defaults.enableStatusMarquee);
+    const changed = state.enableStatusMarquee !== next;
+    state.enableStatusMarquee = next;
+
+    if (changed) {
+        refreshStatusRendering();
+    }
+
+    return changed;
+}
+
+export function applyShowModeTagCapsuleSetting(value) {
+    const next = normalizeBooleanSetting(value, APP_CONFIG.defaults.showModeTagCapsule);
+    const changed = state.showModeTagCapsule !== next;
+    state.showModeTagCapsule = next;
+    updateModeTagVisibility();
+    return changed;
+}
+
+export function applyEnableNumericDifficultySetting(value) {
+    const next = normalizeBooleanSetting(value, APP_CONFIG.defaults.enableNumericDifficulty);
+    const changed = state.enableNumericDifficulty !== next;
+    state.enableNumericDifficulty = next;
+    updateDiffTextVisibility();
+    return changed;
+}
+
+export function applyHideCardDuringPlaySetting(value) {
+    const next = normalizeBooleanSetting(value, APP_CONFIG.defaults.hideCardDuringPlay);
+    const changed = state.hideCardDuringPlay !== next;
+    state.hideCardDuringPlay = next;
+    updateCardPlayVisibility();
+    return changed;
+}
+
+export function applyCardOpacitySetting(value) {
+    const next = normalizeCardOpacityValue(value) || APP_CONFIG.defaults.cardOpacity;
+    const changed = state.cardOpacity !== next;
+    state.cardOpacity = next;
+    applyVisualStyleSettings();
+    return changed;
+}
+
+export function applyCardBlurSetting(value) {
+    const next = normalizeCardBlurValue(value) || APP_CONFIG.defaults.cardBlur;
+    const changed = state.cardBlur !== next;
+    state.cardBlur = next;
+    applyVisualStyleSettings();
+    return changed;
+}
+
+export function applyCardRadiusSetting(value) {
+    const next = normalizeCardRadiusValue(value) || APP_CONFIG.defaults.cardRadius;
+    const changed = state.cardRadius !== next;
+    state.cardRadius = next;
+    applyVisualStyleSettings();
+    return changed;
+}
+
+export function applyEnableUpdateCheckSetting(value) {
+    const next = normalizeBooleanSetting(value, APP_CONFIG.defaults.enableUpdateCheck);
+    const changed = state.enableUpdateCheck !== next;
+    const wasEnabled = state.enableUpdateCheck;
+    state.enableUpdateCheck = next;
+
+    if (!next) {
+        applyAvailableUpdateState(false);
+    } else {
+        const forceCheck = changed && !wasEnabled && next;
+        startUpdateCheckIfEnabled(forceCheck);
+    }
+
+    applyVisualStyleSettings();
+    return changed;
+}
+
+export function applyReverseCardExtendDirectionSetting(value) {
+    const next = normalizeBooleanSetting(value, APP_CONFIG.defaults.reverseCardExtendDirection);
+    const changed = state.reverseCardExtendDirection !== next;
+    state.reverseCardExtendDirection = next;
+    applyVisualStyleSettings();
+    return changed;
+}
+
+function extractSettingsPayloadFromCommandPacket(packet) {
+    if (Array.isArray(packet)) {
+        return packet;
+    }
+
+    if (packet && typeof packet === "object" && packet.command === "getSettings") {
+        return packet.message;
+    }
+
+    return null;
+}
+
+export function setupSettingsCommandListener() {
+    if (state.settingsCommandSubscribed) {
+        return;
+    }
+
+    state.settingsCommandSubscribed = true;
+
+    socket.commands((packet) => {
+        const payload = extractSettingsPayloadFromCommandPacket(packet);
+        if (!payload) {
+            return;
+        }
+
+        // Only apply a setting if it's actually present in the payload.
+        // Otherwise the parser's config.js default would overwrite the
+        // settings.json baseline for settings tosu didn't send.
+        const hasKey = (key) => {
+            if (Array.isArray(payload)) {
+                return payload.some((entry) => entry?.uniqueID === key);
+            }
+            return Object.prototype.hasOwnProperty.call(payload, key);
+        };
+        const applyIf = (key, applyFn, parseResult) =>
+            hasKey(key) ? applyFn(parseResult) : false;
+
+        state.settingsReceivedFromCommand = true;
+        const wsEndpointChanged = applyIf("wsEndpoint", applyWsEndpointSetting, parseWsEndpointValue(payload));
+        const contentBarChanged = applyIf("contentBar", applyContentBarSetting, parseContentBarValue(payload));
+        const srTextChanged = applyIf("srText", applySrTextSetting, parseSrTextValue(payload));
+        const debugChanged = applyIf("debugUseAmount", applyDebugUseAmountSetting, parseDebugUseAmountValue(payload));
+        const diffTextChanged = applyIf("diffText", applyDiffTextSetting, parseDiffTextValue(payload));
+        const estimatorChanged = applyIf("estimatorAlgorithm", applyEstimatorAlgorithmSetting, parseEstimatorAlgorithmValue(payload));
+        const azusaSunnyReferenceHoChanged = applyIf("azusaSunnyReferenceHo", applyAzusaSunnyReferenceHoSetting, parseAzusaSunnyReferenceHoValue(payload));
+        const etternaVersionChanged = applyIf("etternaVersion", applyEtternaVersionSetting, parseEtternaVersionValue(payload));
+        const companellaEtternaVersionChanged = applyIf("companellaEtternaVersion", applyCompanellaEtternaVersionSetting, parseCompanellaEtternaVersionValue(payload));
+        const pauseChanged = applyIf("enablePauseDetection", applyPauseDetectionSetting, parseEnablePauseDetectionValue(payload));
+        const pauseThresholdChanged = applyIf("pauseDetectionThreshold", applyPauseDetectionThresholdSetting, parsePauseDetectionThresholdValue(payload));
+        const rainbowChanged = applyIf("enableEtternaRainbowBars", applyEnableEtternaRainbowBarsSetting, parseEnableEtternaRainbowBarsValue(payload));
+        const statusMarqueeChanged = applyIf("enableStatusMarquee", applyEnableStatusMarqueeSetting, parseEnableStatusMarqueeValue(payload));
+        const vibroChanged = applyIf("VibroDetection", applyVibroDetectionSetting, parseVibroDetectionValue(payload));
+        const modeTagVisibilityChanged = applyIf("showModeTagCapsule", applyShowModeTagCapsuleSetting, parseShowModeTagCapsuleValue(payload));
+        const numericDifficultyChanged = applyIf("enableNumericDifficulty", applyEnableNumericDifficultySetting, parseEnableNumericDifficultyValue(payload));
+        const hideCardDuringPlayChanged = applyIf("hideCardDuringPlay", applyHideCardDuringPlaySetting, parseHideCardDuringPlayValue(payload));
+        const cardOpacityChanged = applyIf("cardOpacity", applyCardOpacitySetting, parseCardOpacityValue(payload));
+        const cardBlurChanged = applyIf("cardBlur", applyCardBlurSetting, parseCardBlurValue(payload));
+        const cardRadiusChanged = applyIf("cardRadius", applyCardRadiusSetting, parseCardRadiusValue(payload));
+        const enableUpdateCheckChanged = applyIf("enableUpdateCheck", applyEnableUpdateCheckSetting, parseEnableUpdateCheckValue(payload));
+        const reverseCardDirectionChanged = applyIf("reverseCardExtendDirection", applyReverseCardExtendDirectionSetting, parseReverseCardExtendDirectionValue(payload));
+        const svChanged = applyIf("useSvDetection", applyUseSvDetectionSetting, parseSvDetectionValue(payload));
+
+        const legacyAutoMode = parseAutoModeValue(payload);
+        if (legacyAutoMode && !isAutoDisplayEnabled()) {
+            state.userSrText = "Auto";
+            state.userContentBar = "Auto";
+            refreshAutoDisplayProfile();
+        }
+
+        const changed = contentBarChanged
+            || wsEndpointChanged
+            || srTextChanged
+            || debugChanged
+            || diffTextChanged
+            || estimatorChanged
+            || azusaSunnyReferenceHoChanged
+            || etternaVersionChanged
+            || companellaEtternaVersionChanged
+            || pauseChanged
+            || pauseThresholdChanged
+            || rainbowChanged
+            || statusMarqueeChanged
+            || vibroChanged
+            || modeTagVisibilityChanged
+            || numericDifficultyChanged
+            || hideCardDuringPlayChanged
+            || cardOpacityChanged
+            || cardBlurChanged
+            || cardRadiusChanged
+            || enableUpdateCheckChanged
+            || reverseCardDirectionChanged
+            || svChanged;
+
+        const recomputeNeeded = contentBarChanged
+            || srTextChanged
+            || debugChanged
+            || diffTextChanged
+            || estimatorChanged
+            || azusaSunnyReferenceHoChanged
+            || etternaVersionChanged
+            || companellaEtternaVersionChanged
+            || pauseChanged
+            || pauseThresholdChanged
+            || rainbowChanged
+            || vibroChanged
+            || modeTagVisibilityChanged
+            || svChanged;
+
+        if (typeof state.initialSettingsResolver === "function") {
+            const resolve = state.initialSettingsResolver;
+            state.initialSettingsResolver = null;
+            resolve();
+        }
+
+        if (recomputeNeeded) {
+            scheduleRecompute("settings changed", true);
+        } else if (changed) {
+            // Caption-only changes (like numeric display toggle) are applied immediately.
+        }
+    });
+
+    if (!state.settingsRequested) {
+        state.settingsRequested = true;
+        socket.sendCommand("getSettings", getCounterPathForCommand());
+    }
+}
+
+function waitForInitialSettingsFromCommand(timeoutMs) {
+    if (state.settingsReceivedFromCommand) {
+        return Promise.resolve();
+    }
+
+    return new Promise((resolve, reject) => {
+        const timeoutId = setTimeout(() => {
+            if (state.initialSettingsResolver) {
+                state.initialSettingsResolver = null;
+            }
+            reject(new Error("getSettings timeout"));
+        }, timeoutMs);
+
+        state.initialSettingsResolver = () => {
+            clearTimeout(timeoutId);
+            resolve();
+        };
+    });
+}
+
+export async function loadSettings() {
+    // Always load settings.json first as baseline.
+    // The command channel may not include every setting; settings.json fills the gaps.
+    let fileSettings = null;
+    try {
+        const response = await fetch("./settings.json", {
+            method: "GET",
+            cache: "no-store",
+        });
+        if (response.ok) {
+            fileSettings = await response.json();
+        }
+    } catch {
+        fileSettings = null;
+    }
+
+    function applySettingsFrom(source) {
+        applyWsEndpointSetting(parseWsEndpointValue(source));
+        applyContentBarSetting(parseContentBarValue(source));
+        applySrTextSetting(parseSrTextValue(source));
+        applyDebugUseAmountSetting(parseDebugUseAmountValue(source));
+        applyDiffTextSetting(parseDiffTextValue(source));
+        applyEstimatorAlgorithmSetting(parseEstimatorAlgorithmValue(source));
+        applyAzusaSunnyReferenceHoSetting(parseAzusaSunnyReferenceHoValue(source));
+        applyEtternaVersionSetting(parseEtternaVersionValue(source));
+        applyCompanellaEtternaVersionSetting(parseCompanellaEtternaVersionValue(source));
+        applyPauseDetectionSetting(parseEnablePauseDetectionValue(source));
+        applyPauseDetectionThresholdSetting(parsePauseDetectionThresholdValue(source));
+        applyEnableEtternaRainbowBarsSetting(parseEnableEtternaRainbowBarsValue(source));
+        applyEnableStatusMarqueeSetting(parseEnableStatusMarqueeValue(source));
+        applyVibroDetectionSetting(parseVibroDetectionValue(source));
+        applyShowModeTagCapsuleSetting(parseShowModeTagCapsuleValue(source));
+        applyEnableNumericDifficultySetting(parseEnableNumericDifficultyValue(source));
+        applyHideCardDuringPlaySetting(parseHideCardDuringPlayValue(source));
+        applyCardOpacitySetting(parseCardOpacityValue(source));
+        applyCardBlurSetting(parseCardBlurValue(source));
+        applyCardRadiusSetting(parseCardRadiusValue(source));
+        applyEnableUpdateCheckSetting(parseEnableUpdateCheckValue(source));
+        applyReverseCardExtendDirectionSetting(parseReverseCardExtendDirectionValue(source));
+        applyUseSvDetectionSetting(parseSvDetectionValue(source));
+    }
+
+    // Apply file settings as baseline immediately
+    if (fileSettings) {
+        applySettingsFrom(fileSettings);
+    } else {
+        // File unavailable — apply config defaults as fallback
+        applySettingsFrom({
+            wsEndpoint: APP_CONFIG.defaults.wsEndpoint || APP_CONFIG.socketHost,
+            contentBar: APP_CONFIG.defaults.contentBar,
+            srText: APP_CONFIG.defaults.srText,
+            debugUseAmount: APP_CONFIG.defaults.debugUseAmount,
+            diffText: APP_CONFIG.defaults.diffText,
+            estimatorAlgorithm: APP_CONFIG.defaults.estimatorAlgorithm,
+            azusaSunnyReferenceHo: APP_CONFIG.defaults.azusaSunnyReferenceHo,
+            etternaVersion: APP_CONFIG.defaults.etternaVersion,
+            companellaEtternaVersion: APP_CONFIG.defaults.companellaEtternaVersion,
+            enablePauseDetection: APP_CONFIG.defaults.pauseDetectionEnabled,
+            pauseDetectionThreshold: APP_CONFIG.defaults.pauseDetectionThresholdMs,
+            enableEtternaRainbowBars: APP_CONFIG.defaults.enableEtternaRainbowBars,
+            enableStatusMarquee: APP_CONFIG.defaults.enableStatusMarquee,
+            VibroDetection: APP_CONFIG.defaults.vibroDetection,
+            showModeTagCapsule: APP_CONFIG.defaults.showModeTagCapsule,
+            enableNumericDifficulty: APP_CONFIG.defaults.enableNumericDifficulty,
+            hideCardDuringPlay: APP_CONFIG.defaults.hideCardDuringPlay,
+            cardOpacity: APP_CONFIG.defaults.cardOpacity,
+            cardBlur: APP_CONFIG.defaults.cardBlur,
+            cardRadius: APP_CONFIG.defaults.cardRadius,
+            enableUpdateCheck: APP_CONFIG.defaults.enableUpdateCheck,
+            reverseCardExtendDirection: APP_CONFIG.defaults.reverseCardExtendDirection,
+            useSvDetection: APP_CONFIG.defaults.useSvDetection,
+        });
+    }
+
+    // Register command listener for live settings updates (user changes in tosu UI).
+    // The listener is set up after file baseline so command callbacks don't
+    // overwrite file values with config defaults for settings tosu doesn't send.
+    setupSettingsCommandListener();
+}
+
+export function currentUseDanielAlgorithm() {
+    return state.estimatorAlgorithm === "Daniel";
+}
+
+export function currentEstimatorAlgorithm() {
+    return state.estimatorAlgorithm;
+}
+
+export function isAutoDisplayEnabledNow() {
+    return isAutoDisplayEnabled();
+}

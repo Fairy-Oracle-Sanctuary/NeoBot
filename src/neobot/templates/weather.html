@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>天气查询结果</title>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap');
+
+        :root {
+            --bg-color: #7C96E8; /* 图片中的典型 Fluent 蓝色 */
+            --glass-bg: rgba(255, 255, 255, 0.15);
+            --glass-border: rgba(255, 255, 255, 0.2);
+            --text-main: #FFFFFF;
+            --text-secondary: rgba(255, 255, 255, 0.8);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Noto Sans SC', system-ui, -apple-system, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 40px 20px;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 500px; /* 窄屏手机比例 */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 40px;
+        }
+
+        /* 顶部城市信息 */
+        .header-section {
+            text-align: center;
+            width: 100%;
+        }
+
+        .city-name {
+            font-size: 28px;
+            font-weight: 400;
+            letter-spacing: 2px;
+            margin-bottom: 30px;
+            opacity: 0.95;
+        }
+
+        .main-temp-wrapper {
+            position: relative;
+            display: inline-block;
+            margin-bottom: 20px;
+            margin-left: -10px;
+        }
+
+        .main-temp {
+            font-size: 120px;
+            font-weight: 300;
+            line-height: 1;
+        }
+
+        .temp-unit {
+            position: absolute;
+            top: 15px;
+            right: -35px;
+            font-size: 40px;
+            font-weight: 300;
+        }
+
+        .weather-desc-row {
+            font-size: 20px;
+            font-weight: 400;
+            opacity: 0.9;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+        }
+
+        .divider {
+            width: 1px;
+            height: 16px;
+            background: rgba(255, 255, 255, 0.5);
+        }
+
+        /* 列表卡片部分 */
+        .forecast-card {
+            width: 100%;
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .chart-container {
+            width: 100%;
+            height: 160px;
+            margin: 15px 0;
+            position: relative;
+        }
+
+        .chart-svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        .chart-line-high {
+            fill: none;
+            stroke: rgba(255, 255, 255, 0.95);
+            stroke-width: 2.5;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .chart-line-low {
+            fill: none;
+            stroke: rgba(255, 255, 255, 0.95);
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .chart-dot-high {
+            fill: #FFFFFF;
+        }
+
+        .chart-dot-low {
+            fill: #FFFFFF;
+        }
+
+        .chart-label {
+            font-family: 'Noto Sans SC', sans-serif;
+            font-size: 20px;
+            font-weight: 500;
+            fill: rgba(255, 255, 255, 0.95);
+        }
+
+        .chart-label-low {
+            font-family: 'Noto Sans SC', sans-serif;
+            font-size: 20px;
+            font-weight: 400;
+            fill: rgba(255, 255, 255, 0.95);
+        }
+
+        .forecast-header {
+            display: flex;
+            justify-content: space-between;
+            padding: 0 8px 10px 8px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            margin-bottom: 10px;
+        }
+
+        .header-item {
+            flex: 1;
+            text-align: center;
+            font-size: 14px;
+            opacity: 0.8;
+        }
+
+        .forecast-grid {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            padding: 0 5px;
+        }
+
+        .grid-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            flex: 1;
+        }
+
+        .grid-day {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2px;
+        }
+
+        .day-label {
+            font-size: 15px;
+            font-weight: 500;
+            color: rgba(255, 255, 255, 0.95);
+        }
+
+        .day-date {
+            font-size: 13px;
+            font-weight: 400;
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .grid-icon {
+            width: 24px;
+            height: 24px;
+            stroke-width: 2;
+        }
+
+        .grid-temp {
+            font-size: 14px;
+            margin-top: 130px; /* 为图表留出空间 */
+        }
+
+        .footer {
+            margin-top: 20px;
+            font-size: 12px;
+            opacity: 0.6;
+            text-align: center;
+        }
+
+        @media (max-width: 400px) {
+            .main-temp { font-size: 100px; }
+            .city-name { font-size: 24px; }
+        }
+    </style>
+
+
+</head>
+<body>
+    <div class="container">
+        <!-- 顶部核心信息 -->
+        <div class="header-section">
+            <div class="city-name">{{ city_name }}</div>
+            
+            {% set first_day = weather_data[0] %}
+            <div class="main-temp-wrapper">
+                <span class="main-temp">{{ first_day.temperature.split(' / ')[0].replace('℃', '') if ' / ' in first_day.temperature else first_day.temperature.replace('℃', '') }}</span>
+                <span class="temp-unit">°C</span>
+            </div>
+
+            <div class="weather-desc-row">
+                <span>{{ first_day.weather }}</span>
+                <div class="divider"></div>
+                <span>风力 {{ first_day.wind_power }}</span>
+            </div>
+        </div>
+
+        <!-- 预测卡片 -->
+        <div class="forecast-card">
+            <div class="forecast-grid">
+                {% set month = query_time.split('年')[1].split('月')[0] if '年' in query_time else '3' %}
+                {# 星期名称映射 #}
+                {% set week_names = ['日', '一', '二', '三', '四', '五', '六'] %}
+                {# 从第一天数据中提取今天是星期几 #}
+                {% set first_day_text = weather_data[0].day %}
+                {% set today_week_text = first_day_text.split('(')[1].replace(')', '') if '(' in first_day_text else '今天' %}
+                {# 将文字星期转换为数字：今天=0, 明天=1, 后天=2, 周一=1, 周二=2... #}
+                {% if today_week_text == '今天' %}
+                    {% set today_week_num = 0 %}
+                {% elif today_week_text == '明天' %}
+                    {% set today_week_num = 1 %}
+                {% elif today_week_text == '后天' %}
+                    {% set today_week_num = 2 %}
+                {% elif '周' in today_week_text %}
+                    {% set week_day_char = today_week_text.replace('周', '').replace('星期', '') %}
+                    {% set week_map = {'日': 0, '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6} %}
+                    {% set today_week_num = week_map[week_day_char] if week_day_char in week_map else 0 %}
+                {% else %}
+                    {% set today_week_num = 0 %}
+                {% endif %}
+                {% for day_weather in weather_data[:5] %}
+                <div class="grid-item">
+                    <div class="grid-day">
+                        {% set day_text = day_weather.day %}
+                        {% set day_num = day_text.split('日')[0] %}
+                        {% if loop.index0 == 0 %}
+                            <span class="day-label">今日</span>
+                        {% elif loop.index0 == 1 %}
+                            <span class="day-label">明日</span>
+                        {% elif loop.index0 == 2 %}
+                            <span class="day-label">后日</span>
+                        {% else %}
+                            {# 计算这一天的星期：今天 + 天数偏移 #}
+                            {% set target_week_num = (today_week_num + loop.index0) % 7 %}
+                            <span class="day-label">星期{{ week_names[target_week_num] }}</span>
+                        {% endif %}
+                        <span class="day-date">{{ month }}/{{ day_num }}</span>
+                    </div>
+                    <i data-lucide="cloud" class="forecast-icon grid-icon" data-condition="{{ day_weather.weather }}"></i>
+                </div>
+                {% endfor %}
+            </div>
+
+            <div class="chart-container">
+                <svg class="chart-svg" viewBox="0 0 400 160" preserveAspectRatio="xMidYMid meet">
+                    {# 收集最高温和最低温数据 #}
+                    {% set high_list = [] %}
+                    {% set low_list = [] %}
+                    {% for day in weather_data[:5] %}
+                        {% set parts = day.temperature.split(' / ') %}
+                        {% set high_str = parts[0].replace('℃', '') %}
+                        {% set low_str = parts[1].replace('℃', '') if parts | length > 1 else parts[0].replace('℃', '') %}
+                        {% set high_val = high_str | int if high_str | int is defined else 0 %}
+                        {% set low_val = low_str | int if low_str | int is defined else 0 %}
+                        {% set _ = high_list.append(high_val) %}
+                        {% set _ = low_list.append(low_val) %}
+                    {% endfor %}
+                    {% set all_temps = high_list + low_list %}
+                    {% set min_t = all_temps | min %}
+                    {% set max_t = all_temps | max %}
+                    {% set temp_range = (max_t - min_t) if (max_t - min_t) > 0 else 1 %}
+                    {% set pad_x = 40 %}
+                    {% set pad_top = 25 %}
+                    {% set pad_bottom = 20 %}
+                    {% set cw = 320 %}
+                    {% set ch = 115 %}
+                    {# 绘制最低温折线 #}
+                    <polyline class="chart-line-low" points="{% for t in low_list %}{{ pad_x + (loop.index0 * cw / 4) }},{{ pad_top + ch - ((t - min_t) / temp_range * ch) }}{% if not loop.last %} {% endif %}{% endfor %}"/>
+                    {# 绘制最高温折线 #}
+                    <polyline class="chart-line-high" points="{% for t in high_list %}{{ pad_x + (loop.index0 * cw / 4) }},{{ pad_top + ch - ((t - min_t) / temp_range * ch) }}{% if not loop.last %} {% endif %}{% endfor %}"/>
+                    {# 绘制最低温圆点和标签 #}
+                    {% for t in low_list %}
+                    {% set x = pad_x + (loop.index0 * cw / 4) %}
+                    {% set y = pad_top + ch - ((t - min_t) / temp_range * ch) %}
+                    <circle class="chart-dot-low" cx="{{ x }}" cy="{{ y }}" r="3.5"/>
+                    <text class="chart-label-low" x="{{ x }}" y="{{ y + 22 }}" text-anchor="middle">{{ t }}°</text>
+                    {% endfor %}
+                    {# 绘制最高温圆点和标签 #}
+                    {% for t in high_list %}
+                    {% set x = pad_x + (loop.index0 * cw / 4) %}
+                    {% set y = pad_top + ch - ((t - min_t) / temp_range * ch) %}
+                    <circle class="chart-dot-high" cx="{{ x }}" cy="{{ y }}" r="4"/>
+                    <text class="chart-label" x="{{ x }}" y="{{ y - 14 }}" text-anchor="middle">{{ t }}°</text>
+                    {% endfor %}
+                </svg>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>数据更新于 {{ query_time }}</p>
+            <p>数据来源: 中国天气网 | NeoBot</p>
+        </div>
+    </div>
+
+    <script>
+        // 根据天气状况动态切换图标
+        function updateIcons() {
+            document.querySelectorAll('.forecast-icon').forEach(icon => {
+                const condition = icon.getAttribute('data-condition');
+                let iconName = 'cloud';
+
+                if (condition.includes('晴')) {
+                    iconName = 'sun';
+                } else if (condition.includes('大雨') || condition.includes('暴雨')) {
+                    iconName = 'cloud-rain-wind';
+                } else if (condition.includes('雨')) {
+                    iconName = 'cloud-rain';
+                } else if (condition.includes('雪')) {
+                    iconName = 'cloud-snow';
+                } else if (condition.includes('雷') || condition.includes('电')) {
+                    iconName = 'cloud-lightning';
+                } else if (condition.includes('阴')) {
+                    iconName = 'cloud';
+                } else if (condition.includes('云')) {
+                    iconName = 'cloudy';
+                } else if (condition.includes('霾') || condition.includes('雾')) {
+                    iconName = 'haze';
+                }
+
+                icon.setAttribute('data-lucide', iconName);
+            });
+            lucide.createIcons();
+        }
+
+        updateIcons();
+    </script>
+</body>
+</html>
+</content>

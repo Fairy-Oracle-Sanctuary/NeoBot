@@ -1,0 +1,36 @@
+# NeoBot 生产部署 —— 直接使用 GHCR 公开镜像
+# 用法：
+#   1. 复制 config.example.toml 为 config.toml 并填写真实凭据
+#   2. 本文件与 config.toml 放在同一目录
+#   3. docker compose -f docker-compose.prod.yml up -d
+services:
+  neobot:
+    # GHCR 公开镜像（由公开仓库的 GitHub Actions 自动构建）
+    image: ghcr.io/fairy-oracle-sanctuary/neobot:latest
+    container_name: neobot
+    restart: unless-stopped
+    # host 网络：容器直接共享宿主机网络，localhost 即宿主机
+    # （NapCat/Redis/MySQL 都配在 127.0.0.1 时用这个最省事）
+    network_mode: host
+    environment:
+      - TZ=Asia/Shanghai
+      # 你的敏感配置也可用环境变量覆盖（从上到下优先级最高），例如：
+      # - MYSQL_HOST=127.0.0.1
+      # - MYSQL_USER=root
+      # - MYSQL_PASSWORD=你的密码
+      # - REDIS_HOST=127.0.0.1
+      # - REDIS_PASSWORD=你的密码
+      # - NAPCAT_WS_URI=ws://127.0.0.1:3001
+      # - NAPCAT_WS_TOKEN=你的token
+      # - DISCORD_TOKEN=你的token
+    volumes:
+      # 敏感配置：从宿主机挂载真实 config.toml（不打进镜像）
+      - ./config.toml:/app/config.toml:ro
+      # 日志与运行数据持久化
+      - ./logs:/app/logs
+      - ./neobot-data:/app/src/neobot/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"

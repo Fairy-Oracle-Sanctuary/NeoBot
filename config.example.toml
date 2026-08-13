@@ -1,0 +1,83 @@
+# NeoBot 示例配置文件 — 用于 CI / 本地开发
+# 所有凭据均为占位值，不会连接真实服务
+
+[napcat_ws]
+uri = "ws://localhost:8080"
+token = ""
+reconnect_interval = 5
+
+[bot]
+command = ["/"]
+ignore_self_message = true
+permission_denied_message = "权限不足，需要 {permission_name} 权限"
+
+[redis]
+host = "localhost"
+port = 6379
+db = 0
+password = ""
+signing_secret = ""  # pubsub 消息 HMAC 签名密钥（多机器人共享，留空则回退用 Redis 密码）
+
+[mysql]
+host = "localhost"
+port = 3306
+user = "root"
+password = ""
+db = "neobot"
+
+[docker]
+base_url = ""
+sandbox_image = "python-sandbox:latest"
+timeout = 10
+concurrency_limit = 5
+
+[image_manager]
+image_height = 1920
+image_width = 1080
+
+[reverse_ws]
+enabled = false
+host = "0.0.0.0"
+port = 3002
+token = ""
+
+[threading]
+max_workers = 10
+client_max_workers = 5
+
+[bilibili]
+sessdata = ""
+bili_jct = ""
+buvid3 = ""
+
+[douyin]
+# douyin2api 服务密钥（https://dy-api.d1ck.top，需向服务方申请），留空则跳过该解析通道
+api_key = ""
+
+[local_file_server]
+enabled = false
+host = "0.0.0.0"
+port = 3003
+# NapCat 访问本文件服务器的地址（用于合并转发等场景的视频/图片下载）
+# 留空 = http://127.0.0.1:3003，适用于 NapCat 与 NeoBot 同机且 NapCat 为 host 网络；
+# 若 NapCat 是独立容器，填宿主机可达地址，如 http://192.168.1.100:3003
+base_url = ""
+
+[discord]
+enabled = false
+token = ""
+
+[cross_platform]
+enabled = false
+
+[logging]
+level = "DEBUG"
+file_level = "DEBUG"
+console_level = "INFO"
+
+[mcc_adapter]
+enabled = false
+service_url = "http://127.0.0.1:8800"
+service_token = "replace-me"
+timeout_ms = 10000
+listener_ignore_senders = []          # 游戏内监听忽略的桥接机器人昵称

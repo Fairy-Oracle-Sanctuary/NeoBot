@@ -1,0 +1,42 @@
+# NeoBot Docker Compose 编排
+#
+# 使用说明：
+#   1. 构建并启动:  docker compose up -d --build
+#   2. 查看日志:    docker compose logs -f
+#   3. 停止:        docker compose down
+#
+# 网络模式说明：
+#   项目的外部依赖（NapCat WS、Redis、MySQL、mcc-service、代理）均配置在
+#   config.toml 的 localhost/127.0.0.1。使用 host 网络模式可直接复用现有
+#   config.toml，无需修改任何地址。
+#
+# 如需改用 bridge 网络连接宿主机服务，可在 environment 中用环境变量覆盖：
+#   NAPCAT_WS_URI=ws://<宿主机IP>:3001
+#   REDIS_HOST=<宿主机IP> / REDIS_PASSWORD=...
+#   MYSQL_HOST=<宿主机IP> / MYSQL_PASSWORD=...
+#   （config_loader 支持的环境变量清单见 src/neobot/core/config_loader.py）
+
+services:
+  neobot:
+    build: .
+    image: neobot:latest
+    container_name: neobot
+    restart: unless-stopped
+    # host 网络模式：容器直接共享宿主机网络，localhost 即宿主机
+    network_mode: host
+    environment:
+      # 时区
+      - TZ=Asia/Shanghai
+    volumes:
+      # 敏感配置（token/密码），从宿主机挂载，不打进镜像
+      - ./config.toml:/app/config.toml:ro
+      # 日志与运行时数据持久化
+      - ./logs:/app/logs
+      - ./src/neobot/data:/app/src/neobot/data
+      # 可选：如需代码沙箱执行功能，取消注释挂载 Docker socket
+      # - /var/run/docker.sock:/var/run/docker.sock
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"

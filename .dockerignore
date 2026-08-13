@@ -1,0 +1,42 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# 运行时数据与日志（通过 volume 挂载，不打进镜像）
+logs/
+src/neobot/data/
+*.log
+
+# 敏感配置（通过 volume 挂载）
+config.toml
+.env
+ca/
+
+# 测试
+tests/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# 文档（不影响运行，可排除以减小镜像）
+docs/
+*.md
+LICENSE
+neobot-integration.md
+
+# Docker
+Dockerfile
+.dockerignore
+docker-compose.yml
+sandbox.Dockerfile

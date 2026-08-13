@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bot Status</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --window-bg: rgba(30, 41, 59, 0.85);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --accent: #6366f1;
+            --text-title: #f8fafc;
+            --text-desc: #94a3b8;
+            --text-cmd: #a5f3fc;
+            --card-bg: rgba(0, 0, 0, 0.2);
+            --cmd-bg: #0b1120;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Noto Sans SC', system-ui, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-title);
+            display: flex;
+            justify-content: center;
+            padding: 0;
+            min-height: 100vh;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+        .window {
+            width: 100%;
+            min-height: 100vh;
+            background: var(--window-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            display: flex;
+            flex-direction: column;
+        }
+        .header {
+            padding: 32px 40px;
+            border-bottom: 1px solid var(--border-color);
+            background: rgba(255, 255, 255, 0.02);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .dots { display: flex; gap: 8px; }
+        .dot { width: 12px; height: 12px; border-radius: 50%; }
+        .red { background: #ef4444; }
+        .yellow { background: #f59e0b; }
+        .green { background: #10b981; }
+        .title {
+            font-size: 18px;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            color: var(--text-desc);
+            text-transform: uppercase;
+        }
+        .content {
+            padding: 40px;
+            display: flex;
+            flex-direction: column;
+            gap: 32px;
+        }
+        .page-title {
+            display: flex;
+            align-items: center;
+            gap: 24px;
+            margin-bottom: 10px;
+        }
+        .bot-avatar {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            border: 3px solid var(--accent);
+        }
+        .page-title h1 {
+            font-size: 48px;
+            background: linear-gradient(to right, #fff, #94a3b8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .page-title p {
+            color: var(--text-desc);
+            font-size: 20px;
+            margin-top: 12px;
+        }
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 24px;
+        }
+        .status-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 14px;
+            padding: 24px;
+            position: relative;
+            overflow: hidden;
+        }
+        .status-card::before {
+            content: '';
+            position: absolute;
+            left: 0; top: 0; bottom: 0;
+            width: 4px;
+            background: var(--accent);
+            opacity: 0.6;
+        }
+        .card-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 16px;
+        }
+        .info-list {
+            list-style: none;
+        }
+        .info-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 16px;
+        }
+        .info-item:last-child {
+            border-bottom: none;
+        }
+        .info-label {
+            color: var(--text-desc);
+        }
+        .info-value {
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--text-title);
+            font-weight: 500;
+        }
+        .info-value.online { color: #22c55e; }
+        .info-value.offline { color: #ef4444; }
+        .command-stats {
+            column-count: 2;
+            column-gap: 24px;
+        }
+        .multi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 24px;
+        }
+        .footer {
+            margin-top: auto;
+            padding: 32px 40px;
+            border-top: 1px solid var(--border-color);
+            background: rgba(0, 0, 0, 0.1);
+            color: var(--text-desc);
+            font-size: 14px;
+            text-align: center;
+            letter-spacing: 1px;
+        }
+    </style>
+</head>
+<body>
+    <div class="window">
+        <div class="header">
+            <div class="dots">
+                <div class="dot red"></div>
+                <div class="dot yellow"></div>
+                <div class="dot green"></div>
+            </div>
+            <div class="title">NeoBot System</div>
+        </div>
+
+        <div class="content">
+            <div class="page-title">
+                <img src="{{ bot_info.avatar_url }}" alt="Bot Avatar" class="bot-avatar">
+                <div>
+                    <h1>{{ bot_info.nickname }} - 运行状态</h1>
+                    <p>System Status & Information</p>
+                </div>
+            </div>
+
+            <div class="status-grid">
+                <div class="status-card">
+                    <h2 class="card-title">核心指标</h2>
+                    <ul class="info-list">
+                        <li class="info-item">
+                            <span class="info-label">机器人 QQ</span>
+                            <span class="info-value">{{ bot_info.user_id }}</span>
+                        </li>
+                        <li class="info-item">
+                            <span class="info-label">运行状态</span>
+                            <span class="info-value {{ 'online' if status_info.online else 'offline' }}">{{ '在线' if status_info.online else '离线' }}</span>
+                        </li>
+                        <li class="info-item">
+                            <span class="info-label">启动于</span>
+                            <span class="info-value">{{ bot_info.start_time }}</span>
+                        </li>
+                        <li class="info-item">
+                            <span class="info-label">已运行时长</span>
+                            <span class="info-value">{{ bot_info.uptime }}</span>
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="status-card">
+                    <h2 class="card-title">消息与指令统计</h2>
+                    <ul class="info-list">
+                        <li class="info-item">
+                            <span class="info-label">接收消息总数</span>
+                            <span class="info-value">{{ stats.messages_received }}</span>
+                        </li>
+                        <li class="info-item">
+                            <span class="info-label">发送消息总数</span>
+                            <span class="info-value">{{ stats.messages_sent }}</span>
+                        </li>
+                        <li class="info-item">
+                            <span class="info-label">指令调用总数</span>
+                            <span class="info-value">{{ stats.total_commands }}</span>
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="status-card">
+                    <h2 class="card-title">系统资源 (System)</h2>
+                    <ul class="info-list">
+                        <li class="info-item">
+                            <span class="info-label">CPU 占用</span>
+                            <span class="info-value">{{ system.cpu_percent }}%</span>
+                        </li>
+                        <li class="info-item">
+                            <span class="info-label">CPU 核心</span>
+                            <span class="info-value">{{ system.cpu_count }} ({{ system.cpu_count_physical }} 物理)</span>
+                        </li>
+                        <li class="info-item">
+                            <span class="info-label">内存占用</span>
+                            <span class="info-value">{{ system.mem_percent }}% ({{ system.mem_used }}G / {{ system.mem_total }}G)</span>
+                        </li>
+                        <li class="info-item">
+                            <span class="info-label">可用内存</span>
+                            <span class="info-value">{{ system.mem_available }}G</span>
+                        </li>
+                        <li class="info-item">
+                            <span class="info-label">Bot 进程内存</span>
+                            <span class="info-value">{{ system.bot_mem_mb }} MB</span>
+                        </li>
+                        <li class="info-item">
+                            <span class="info-label">磁盘占用</span>
+                            <span class="info-value">{{ system.disk_percent }}% ({{ system.disk_used }}G / {{ system.disk_total }}G)</span>
+                        </li>
+                        <li class="info-item">
+                            <span class="info-label">磁盘可用</span>
+                            <span class="info-value">{{ system.disk_free }}G</span>
+                        </li>
+                        <li class="info-item">
+                            <span class="info-label">网络流量 (↑/↓)</span>
+                            <span class="info-value">{{ system.net_sent }}MB / {{ system.net_recv }}MB</span>
+                        </li>
+                        <li class="info-item">
+                            <span class="info-label">进程总数</span>
+                            <span class="info-value">{{ system.process_count }}</span>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="status-card">
+                    <h2 class="card-title">调试信息 (Debug)</h2>
+                    <ul class="info-list">
+                        <li class="info-item">
+                            <span class="info-label">客户端</span>
+                            <span class="info-value">{{ version_info.app_name }}</span>
+                        </li>
+                        <li class="info-item">
+                            <span class="info-label">客户端版本</span>
+                            <span class="info-value">v{{ version_info.app_version }}</span>
+                        </li>
+                        <li class="info-item">
+                            <span class="info-label">OneBot 协议</span>
+                            <span class="info-value">{{ version_info.protocol_version }}</span>
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="status-card">
+                    <h2 class="card-title">网络信息 (Network)</h2>
+                    <ul class="info-list">
+                        <li class="info-item">
+                            <span class="info-label">主机名</span>
+                            <span class="info-value">{{ network.hostname }}</span>
+                        </li>
+                        <li class="info-item">
+                            <span class="info-label">本地 IP</span>
+                            <span class="info-value">{{ network.local_ip }}</span>
+                        </li>
+                        <li class="info-item">
+                            <span class="info-label">公网 IP</span>
+                            <span class="info-value">{{ network.public_ip }}</span>
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="status-card">
+                    <h2 class="card-title">操作系统 (OS)</h2>
+                    <ul class="info-list">
+                        <li class="info-item">
+                            <span class="info-label">系统</span>
+                            <span class="info-value">{{ os.os_name }}</span>
+                        </li>
+                        <li class="info-item">
+                            <span class="info-label">版本</span>
+                            <span class="info-value">{{ os.os_version }}</span>
+                        </li>
+                        <li class="info-item">
+                            <span class="info-label">架构</span>
+                            <span class="info-value">{{ os.os_arch }}</span>
+                        </li>
+                        <li class="info-item">
+                            <span class="info-label">Python 版本</span>
+                            <span class="info-value">{{ os.python_version }}</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="status-card">
+                <h2 class="card-title">指令调用排行榜</h2>
+                <div class="command-stats">
+                    <ul class="info-list">
+                        {% for command in command_stats %}
+                        <li class="info-item">
+                            <span class="info-label">/{{ command.name }}</span>
+                            <span class="info-value">{{ command.count }} 次</span>
+                        </li>
+                        {% else %}
+                        <li class="info-item">
+                            <span class="info-label">暂无指令调用记录</span>
+                            <span class="info-value"></span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            NeoBot System - 运行状态面板
+        </div>
+    </div>
+</body>
+</html>

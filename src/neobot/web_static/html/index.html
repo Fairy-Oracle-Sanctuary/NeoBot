@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEOBOT | Private Digital Companion</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;500;700&family=Inter:wght@300;400;600&family=Noto+Serif+SC:wght@300;400;700&family=Cormorant+Garamond:ital,wght@0,400;1,400&display=swap" rel="stylesheet">
+    <script src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js"></script>
+
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['"Inter"', 'sans-serif'],
+              display: ['"Space Grotesk"', 'sans-serif'],
+              serif: ['"Noto Serif SC"', 'serif'],
+              lyric: ['"Cormorant Garamond"', 'serif'],
+            },
+            colors: {
+              brand: {
+                bg: '#050505',
+                surface: '#121212',
+                border: '#27272a',
+                text: '#e4e4e7',
+                muted: '#a1a1aa',
+              }
+            },
+            animation: {
+              'fade-in-up': 'fadeInUp 1s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+              'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            },
+            keyframes: {
+              fadeInUp: {
+                '0%': { opacity: '0', transform: 'translateY(20px)' },
+                '100%': { opacity: '1', transform: 'translateY(0)' },
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+        body {
+            background-color: #050505;
+            color: #e4e4e7;
+            background-image: radial-gradient(circle at 50% 0%, #1a1a1a 0%, #050505 60%);
+            background-attachment: fixed;
+        }
+
+        .feature-card {
+            background: rgba(18, 18, 18, 0.6);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+        .feature-card:hover {
+            border-color: rgba(255, 255, 255, 0.2);
+            background: rgba(30, 30, 30, 0.8);
+            transform: translateY(-2px);
+        }
+
+        .lyric-text {
+            font-family: "Cormorant Garamond", serif;
+            font-style: italic;
+        }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #050505; }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+    </style>
+</head>
+<body class="antialiased selection:bg-white/20 selection:text-white">
+
+    <!-- 导航 -->
+    <nav class="fixed top-0 w-full z-50 border-b border-white/5 bg-black/80 backdrop-blur-md">
+        <div class="max-w-6xl mx-auto px-6 h-20 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-2 h-2 bg-white rounded-full animate-pulse-slow"></div>
+                <span class="font-display font-bold text-sm tracking-widest text-white">NEO<span class="text-white/40 font-light">BOT</span></span>
+            </div>
+            
+            <div class="flex items-center gap-4 text-[10px] font-mono text-gray-400 uppercase tracking-widest">
+                <span class="px-2 py-1 rounded border border-white/10 bg-white/5">Private Project</span>
+                <span>v1.0.0</span>
+            </div>
+        </div>
+    </nav>
+
+    <main class="pt-40 pb-32 px-6">
+        <div class="max-w-5xl mx-auto space-y-32">
+            
+            <!-- Hero -->
+            <section class="grid lg:grid-cols-2 gap-16 items-center animate-fade-in-up">
+                <div class="space-y-8">
+                    <div class="space-y-2">
+                        <div class="font-mono text-xs text-gray-500 mb-2">SYSTEM STATUS: ONLINE</div>
+                        <h1 class="text-5xl md:text-7xl font-display font-bold text-white leading-tight">
+                            My Digital<br>
+                            <span class="text-white/30">Sanctuary</span>
+                        </h1>
+                    </div>
+                    
+                    <div class="space-y-6">
+                        <p class="font-serif text-xl text-gray-300 leading-relaxed">
+                            这不是一个为了改变世界而生的项目。<br>
+                            它只是一个安静的角落，存放着我的一点点任性和想象。
+                        </p>
+                        <p class="font-serif text-sm text-gray-500 italic border-l-2 border-white/10 pl-4">
+                            “我不觉得这个作品有多好，我很差劲，啥也做不好。<br>
+                            但这可能是我留在这个世界的遗迹。”
+                        </p>
+                    </div>
+                </div>
+
+                <!-- 歌词展示 -->
+                <div class="hidden lg:block text-right space-y-4 opacity-70">
+                    <div class="lyric-text text-2xl text-white/90 leading-loose">
+                        <p>are smiling down on me because</p>
+                        <p class="text-base text-gray-500 not-italic font-serif">五亿颗星星 正对着我微笑</p>
+                        <p class="mt-4">five hundred millions of stars</p>
+                        <p>are hiding you there?</p>
+                        <p class="text-base text-gray-500 not-italic font-serif">是否已经找到藏起来的内心？</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 功能展示 -->
+            <section>
+                <div class="flex items-end justify-between mb-12 border-b border-white/10 pb-4">
+                    <h2 class="font-display text-3xl text-white font-bold">My Toolbox</h2>
+                    <span class="font-mono text-xs text-gray-500">INSTALLED MODULES</span>
+                </div>
+
+                <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    
+                    <!-- 媒体解析 -->
+                    <div class="feature-card p-6 group">
+                        <div class="flex justify-between items-start mb-4">
+                            <iconify-icon icon="mdi:link-variant" class="text-2xl text-blue-400"></iconify-icon>
+                            <span class="font-mono text-[10px] text-gray-600">WEB_PARSER</span>
+                        </div>
+                        <h3 class="font-display text-lg text-white mb-2">万能解析</h3>
+                        <p class="font-serif text-sm text-gray-400 leading-relaxed">
+                            每次在群里发链接都要跳转半天，太麻烦了。所以我写了这个
+                        </p>
+                    </div>
+
+                    <!-- 代码沙箱 -->
+                    <div class="feature-card p-6 group">
+                        <div class="flex justify-between items-start mb-4">
+                            <iconify-icon icon="mdi:code-braces" class="text-2xl text-yellow-400"></iconify-icon>
+                            <span class="font-mono text-[10px] text-gray-600">CODE_PY</span>
+                        </div>
+                        <h3 class="font-display text-lg text-white mb-2">Python 沙箱</h3>
+                        <p class="font-serif text-sm text-gray-400 leading-relaxed">
+                            sadbox
+                        </p>
+                    </div>
+
+                    <!-- Furry 图库 -->
+                    <div class="feature-card p-6 group">
+                        <div class="flex justify-between items-start mb-4">
+                            <iconify-icon icon="mdi:paw" class="text-2xl text-orange-400"></iconify-icon>
+                            <span class="font-mono text-[10px] text-gray-600">FURRY</span>
+                        </div>
+                        <h3 class="font-display text-lg text-white mb-2">Furry 图库</h3>
+                        <p class="font-serif text-sm text-gray-400 leading-relaxed">
+                            一点点个人爱好。在这个小小的空间里，我可以诚实地面对自己的喜好，不用在意别人的眼光。
+                        </p>
+                    </div>
+
+                    <!-- 天气查询 -->
+                    <div class="feature-card p-6 group">
+                        <div class="flex justify-between items-start mb-4">
+                            <iconify-icon icon="mdi:weather-partly-cloudy" class="text-2xl text-cyan-400"></iconify-icon>
+                            <span class="font-mono text-[10px] text-gray-600">WEATHER</span>
+                        </div>
+                        <h3 class="font-display text-lg text-white mb-2">天气查询</h3>
+                        <p class="font-serif text-sm text-gray-400 leading-relaxed">
+                            weather
+                        </p>
+                    </div>
+
+                    <!-- 头像镜像 -->
+                    <div class="feature-card p-6 group">
+                        <div class="flex justify-between items-start mb-4">
+                            <iconify-icon icon="mdi:image-filter-center-focus" class="text-2xl text-purple-400"></iconify-icon>
+                            <span class="font-mono text-[10px] text-gray-600">MIRROR_AVATAR</span>
+                        </div>
+                        <h3 class="font-display text-lg text-white mb-2">头像镜像</h3>
+                        <p class="font-serif text-sm text-gray-400 leading-relaxed">
+                            无聊时的恶搞
+                        </p>
+                    </div>
+
+                    <!-- 今日人品 -->
+                    <div class="feature-card p-6 group">
+                        <div class="flex justify-between items-start mb-4">
+                            <iconify-icon icon="mdi:dice-5" class="text-2xl text-red-400"></iconify-icon>
+                            <span class="font-mono text-[10px] text-gray-600">JRCD</span>
+                        </div>
+                        <h3 class="font-display text-lg text-white mb-2">今日人品</h3>
+                        <p class="font-serif text-sm text-gray-400 leading-relaxed">
+                            每天测测运气。虽然知道这只是 `random.randint(0, 100)`
+                        </p>
+                    </div>
+
+                </div>
+            </section>
+
+            <!-- 关于作者 -->
+            <section class="py-16 border-t border-white/5">
+                <div class="flex items-end justify-between mb-12">
+                    <h2 class="font-display text-3xl text-white font-bold">Creators</h2>
+                    <span class="font-mono text-xs text-gray-500">FAIRY-ORACLE-SANCTUARY</span>
+                </div>
+
+                <div class="grid md:grid-cols-2 gap-12">
+                    <!-- 作者 1 -->
+                    <div class="flex items-start gap-6 group">
+                        <img src="https://q1.qlogo.cn/g?b=qq&nk=2221577113&s=640" alt="镀铬酸钾" 
+                             class="w-16 h-16 rounded-full border border-white/10 grayscale group-hover:grayscale-0 transition-all duration-500">
+                        <div class="space-y-2">
+                            <h3 class="font-display text-xl text-white">镀铬酸钾</h3>
+                            <p class="font-mono text-xs text-gray-500 uppercase tracking-wider">Lead Developer</p>
+                            <p class="font-serif text-sm text-gray-400 leading-relaxed pt-2">
+                                “写代码是为了逃避现实”
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- 作者 2 -->
+                    <div class="flex items-start gap-6 group">
+                        <img src="https://q1.qlogo.cn/g?b=qq&nk=2185823427&s=640" alt="baby2016" 
+                             class="w-16 h-16 rounded-full border border-white/10 grayscale group-hover:grayscale-0 transition-all duration-500">
+                        <div class="space-y-2">
+                            <h3 class="font-display text-xl text-white">baby2016</h3>
+                            <p class="font-mono text-xs text-gray-500 uppercase tracking-wider">Co-Founder</p>
+                            <p class="font-serif text-sm text-gray-400 leading-relaxed pt-2">
+                                “在这个喧嚣的世界里，寻找一点点安静的秩序。”
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 歌词过渡 -->
+            <section class="py-16 text-center space-y-6 opacity-80">
+                <div class="lyric-text text-3xl text-white/80">
+                    "all of the stars have same faces<br>
+                    no i can't find yours"
+                </div>
+                <p class="font-serif text-sm text-gray-500 tracking-widest uppercase">
+                    所有的星星都是一个样 / 找不到你
+                </p>
+            </section>
+
+            <!-- 终端展示 -->
+            <section class="max-w-3xl mx-auto">
+                <div class="flex items-center justify-between mb-2 px-1">
+                    <span class="font-mono text-[10px] text-gray-500">SYSTEM LOG</span>
+                    <div class="flex gap-1.5">
+                        <div class="w-2 h-2 rounded-full bg-red-500/20"></div>
+                        <div class="w-2 h-2 rounded-full bg-yellow-500/20"></div>
+                        <div class="w-2 h-2 rounded-full bg-green-500/20"></div>
+                    </div>
+                </div>
+                <div class="bg-[#0a0a0a] border border-white/10 p-6 font-mono text-xs h-56 overflow-hidden relative rounded-lg">
+                    <div id="terminal" class="space-y-2 text-gray-400">
+                        <!-- JS 注入 -->
+                    </div>
+                    <div class="absolute bottom-0 left-0 w-full h-16 bg-gradient-to-t from-[#0a0a0a] to-transparent pointer-events-none"></div>
+                </div>
+            </section>
+
+            <!-- 结尾 -->
+            <section class="text-center py-16 space-y-8">
+                <div class="lyric-text text-4xl text-white leading-tight">
+                    "and all that i wished was to see one<br>
+                    <span class="text-white/40">tiny little star</span>"
+                </div>
+                <div class="pt-8">
+                    <p class="font-display font-bold text-xl text-white">NO GROWN-UPS UNDERSTAND</p>
+                    <p class="font-serif text-sm text-gray-500 mt-2">不要变成大人那样</p>
+                </div>
+            </section>
+
+        </div>
+    </main>
+
+    <footer class="py-12 border-t border-white/5 bg-black/20">
+        <div class="max-w-6xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-6">
+            <div class="text-center md:text-left">
+                <div class="font-display font-bold text-white mb-1">NEOBOT</div>
+                <p class="font-mono text-[10px] text-gray-600">
+                    PRIVATE PERSONAL PROJECT<br>
+                    NOT FOR PUBLIC DISTRIBUTION
+                </p>
+            </div>
+            <div class="font-mono text-[10px] text-gray-600 text-center md:text-right">
+                TO ASTEROID B-612<br>
+                SASAKURE.UK
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        const terminalLines = [
+            { text: "> SYSTEM_INIT...", color: "text-gray-500" },
+            { text: "> LOADING_MODULES: [weather, code_py, furry, web_parser]...", color: "text-gray-400", delay: 500 },
+            { text: "> CHECKING_ENVIRONMENT...", color: "text-gray-500", delay: 300 },
+            { text: "> STATUS: PRIVATE_MODE_ACTIVE", color: "text-blue-400", delay: 600 },
+            { text: "> CONNECTING_TO_ONEBOT...", color: "text-gray-500", delay: 800 },
+            { text: "> CONNECTION_ESTABLISHED", color: "text-green-500", delay: 1000 },
+            { text: "> WAITING_FOR_COMMAND...", color: "text-white animate-pulse", delay: 2000 }
+        ];
+
+        const term = document.getElementById('terminal');
+        let lineIndex = 0;
+
+        function runTerminal() {
+            if (lineIndex >= terminalLines.length) return;
+            
+            const line = terminalLines[lineIndex];
+            const div = document.createElement('div');
+            div.className = `${line.color}`;
+            div.textContent = line.text;
+            term.appendChild(div);
+            
+            lineIndex++;
+            setTimeout(runTerminal, line.delay || 500);
+        }
+
+        setTimeout(runTerminal, 1000);
+    </script>
+</body>
+</html>
