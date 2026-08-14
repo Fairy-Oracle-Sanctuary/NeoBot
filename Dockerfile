@@ -37,7 +37,8 @@ COPY scripts ./scripts
 # 运行期需要的数据目录（admin.json / permissions.json 会被运行时写入）
 RUN mkdir -p logs /app/src/neobot/data
 ARG COMMIT_SHA=unknown
-RUN echo "${COMMIT_SHA}" > /app/commit-sha
+RUN echo "${COMMIT_SHA}" > /app/commit-sha \
+    && echo "${COMMIT_SHA}" > /app/versions
 # 反向 WebSocket 3002 / 本地文件服务器 3003
 EXPOSE 3002 3003
 
