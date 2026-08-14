@@ -104,6 +104,7 @@ class DouyinModel(BaseModel):
     对应 `config.toml` 中的 `[douyin]` 配置块。
     """
     api_key: str = ""  # douyin2api 服务密钥（https://dy-api.d1ck.top），留空则跳过该解析通道
+    qzqi_api_key: str = ""  # 远梦API（https://api.qzqi.com）DouYinVideo 接口密钥，留空则跳过该解析通道
 
 
 class LocalFileServerModel(BaseModel):

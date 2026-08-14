@@ -53,6 +53,8 @@ buvid3 = ""
 [douyin]
 # douyin2api 服务密钥（https://dy-api.d1ck.top，需向服务方申请），留空则跳过该解析通道
 api_key = ""
+# 远梦API（https://api.qzqi.com）DouYinVideo 接口密钥，留空则跳过该解析通道（也支持环境变量 DOUYIN_QZQI_APIKEY）
+qzqi_api_key = ""
 
 [local_file_server]
 enabled = false

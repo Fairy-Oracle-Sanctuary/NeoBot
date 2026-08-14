@@ -181,6 +181,7 @@ class Config:
         if 'douyin' in raw_config:
             douyin_config = raw_config['douyin']
             douyin_config['api_key'] = env_loader.get('DOUYIN_API_KEY', douyin_config.get('api_key', ''))
+            douyin_config['qzqi_api_key'] = env_loader.get('DOUYIN_QZQI_APIKEY', douyin_config.get('qzqi_api_key', ''))
         
         # Docker 配置
         if 'docker' in raw_config:

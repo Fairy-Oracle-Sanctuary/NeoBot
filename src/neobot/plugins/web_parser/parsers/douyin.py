@@ -305,9 +305,16 @@ class DouyinParser(BaseParser):
             logger.error(f"[{self.name}] makuo API解析失败: {e}")
             return None
     
-    async def _parse_api_mmp(self, url: str) -> Optional[Dict[str, Any]]:
+    async def _parse_api_qzqi_douyin(self, url: str) -> Optional[Dict[str, Any]]:
         """
-        使用 mmp API 解析抖音视频/图集
+        使用远梦API（https://api.qzqi.com）的 DouYinVideo 接口解析抖音内容，
+        支持短视频 / 图集 / 实况（无水印）。
+
+        密钥从配置 `[douyin].qzqi_api_key` 读取（也支持环境变量
+        DOUYIN_QZQI_APIKEY），留空时跳过该通道。
+
+        注意：该接口的响应字段文档未公开完整示例，本方法采用健壮容错解析，
+        对常见的 data 包裹、video/images/live 字段做了多重兼容。
 
         Args:
             url (str): 抖音视频URL
@@ -316,77 +323,120 @@ class DouyinParser(BaseParser):
             Optional[Dict[str, Any]]: 视频信息字典，如果失败则返回None
         """
         try:
-            api_url = f"https://api.mmp.cc/api/Jiexi?url={url}"
+            api_key = (getattr(config.douyin, "qzqi_api_key", "") or "").strip()
+            if not api_key:
+                logger.warning(
+                    f"[{self.name}] 未配置 douyin.qzqi_api_key，跳过 qzqi DouYinVideo 解析通道"
+                )
+                return None
+
+            api_url = "https://api.qzqi.com/api/v1/DouYinVideo"
+            params = {"url": url, "apikey": api_key}
 
             session = self.get_session()
-            async with session.get(api_url, headers=self.HEADERS, timeout=aiohttp.ClientTimeout(total=10)) as response:
+            async with session.get(
+                api_url,
+                params=params,
+                headers=self.HEADERS,
+                timeout=aiohttp.ClientTimeout(total=15),
+            ) as response:
                 if response.status != 200:
-                    logger.error(f"[{self.name}] mmp API请求失败，状态码: {response.status}")
+                    logger.error(f"[{self.name}] qzqi DouYinVideo 请求失败，状态码: {response.status}")
+                    return None
+                try:
+                    response_data = await response.json()
+                except Exception:
+                    logger.error(f"[{self.name}] qzqi DouYinVideo 返回非JSON响应")
                     return None
 
-                response_data = await response.json()
-
             if not isinstance(response_data, dict):
-                logger.error(f"[{self.name}] mmp API返回格式错误: {response_data}")
+                logger.error(f"[{self.name}] qzqi DouYinVideo 返回格式错误: {response_data}")
                 return None
 
-            if response_data.get("code") != 200:
-                logger.error(f"[{self.name}] mmp API返回错误: {response_data}")
+            # 提取业务数据：可能直接是 data 段，也可能整段就是数据
+            data = response_data.get("data")
+            if data is None:
+                data = response_data
+            if not isinstance(data, dict):
+                logger.error(f"[{self.name}] qzqi DouYinVideo 缺少 data: {response_data}")
                 return None
 
-            data = response_data.get("data", {})
-            if not data:
-                logger.error(f"[{self.name}] mmp API返回数据为空")
-                return None
+            # 通用字段提取（兼容多种命名）
+            nickname = data.get("author") or data.get("author_name") or data.get("nickname") or "未知作者"
+            desc = data.get("desc") or data.get("title") or data.get("content") or "无描述"
+            cover = data.get("cover") or data.get("cover_url") or data.get("pic") or data.get("image") or ""
+            like = data.get("like") or data.get("digg_count") or data.get("likes") or 0
 
-            data_type = data.get("type", "video")
-
-            # 图集: images 字段
-            image_list = data.get("images")
-            is_image_set = data_type == "image" or (isinstance(image_list, list) and len(image_list) > 0)
-
-            if is_image_set:
-                image_urls = image_list if isinstance(image_list, list) else []
-                if image_urls:
-                    logger.info(f"[{self.name}] mmp 解析为图集，共 {len(image_urls)} 张图片")
+            # 图集：images 列表 / pics / image_list / slides
+            image_list = (
+                data.get("images")
+                or data.get("image_list")
+                or data.get("pics")
+                or data.get("slides")
+                or []
+            )
+            image_urls = []
+            for item in (image_list if isinstance(image_list, list) else []):
+                if isinstance(item, str):
+                    image_urls.append(item)
+                elif isinstance(item, dict):
+                    for k in ("url", "image_url", "src", "download_url"):
+                        if item.get(k):
+                            image_urls.append(item[k])
+                            break
+            if image_urls:
+                logger.info(f"[{self.name}] qzqi DouYinVideo 解析为图集，共 {len(image_urls)} 张图片")
                 return {
                     "type": "image",
                     "video_url": "",
                     "video_url_HQ": "",
-                    "nickname": data.get("nickname", "未知作者"),
-                    "desc": data.get("desc", "无描述"),
-                    "aweme_id": data.get("aweme_id", ""),
-                    "like": data.get("like", 0),
-                    "cover": data.get("cover", ""),
-                    "time": data.get("time", 0),
-                    "author_avatar": data.get("author_avatar", ""),
-                    "music": data.get("music", {}),
+                    "nickname": nickname,
+                    "desc": desc,
+                    "aweme_id": data.get("aweme_id") or data.get("id") or data.get("video_id") or "",
+                    "like": like,
+                    "cover": cover,
+                    "time": data.get("time") or data.get("create_time") or 0,
+                    "author_avatar": data.get("avatar") or data.get("author_avatar") or "",
+                    "music": data.get("music") or {},
                     "images": image_urls,
                 }
 
-            # 视频
+            # 视频：多种直链字段兼容
+            video_url = (
+                data.get("video_url")
+                or data.get("video")
+                or data.get("url")
+                or data.get("play_addr")
+                or data.get("play_url")
+                or ""
+            ).strip()
+            if not video_url:
+                logger.error(f"[{self.name}] qzqi DouYinVideo 未找到视频直链/图集")
+                return None
+
             return {
                 "type": "video",
-                "video_url": data.get("video_url", ""),
-                "video_url_HQ": data.get("video_url_HQ", ""),
-                "nickname": data.get("nickname", "未知作者"),
-                "desc": data.get("desc", "无描述"),
-                "aweme_id": data.get("aweme_id", ""),
-                "like": data.get("like", 0),
-                "cover": data.get("cover", ""),
-                "time": data.get("time", 0),
-                "author_avatar": data.get("author_avatar", ""),
-                "music": data.get("music", {}),
+                "video_url": video_url,
+                "video_url_HQ": video_url,
+                "nickname": nickname,
+                "desc": desc,
+                "aweme_id": data.get("aweme_id") or data.get("id") or data.get("video_id") or "",
+                "like": like,
+                "cover": cover,
+                "time": data.get("time") or data.get("create_time") or 0,
+                "author_avatar": data.get("avatar") or data.get("author_avatar") or "",
+                "music": data.get("music") or {},
                 "images": [],
             }
 
         except Exception as e:
-            logger.error(f"[{self.name}] mmp API解析失败: {e}")
+            logger.error(f"[{self.name}] qzqi DouYinVideo 解析失败: {e}")
             return None
     
     async def parse(self, url: str) -> Optional[Dict[str, Any]]:
         """
-        解析抖音视频信息（并发请求多个API，取最快返回的有效结果）
+        解析抖音视频信息：优先尝试主解析通道（douyin2api → qzqi DouYinVideo），
+        全部失败后才并发尝试备用通道（xinyew / xhus / makuo）。
 
         Args:
             url (str): 抖音视频URL
@@ -397,6 +447,22 @@ class DouyinParser(BaseParser):
         # 解析整体超时（秒），对标 Java 版的 OVERALL_TIMEOUT_SECONDS
         overall_timeout = 60
 
+        # ---- 主通道：依次串行尝试，命中即返回 ----
+        primary_channels = [
+            ("douyin2api", self._parse_api_local(url)),
+            ("qzqi", self._parse_api_qzqi_douyin(url)),
+        ]
+        for api_name, coro in primary_channels:
+            try:
+                result = await coro
+            except Exception as e:
+                logger.error(f"[{self.name}] {api_name} API异常: {e}")
+                result = None
+            if result:
+                logger.info(f"[{self.name}] 使用 {api_name} API 成功解析")
+                return result
+
+        # ---- 备用通道：并发兜底 ----
         async def try_api(coro, api_name: str) -> tuple:
             try:
                 result = await coro
@@ -406,11 +472,9 @@ class DouyinParser(BaseParser):
                 return (None, api_name)
 
         tasks = [
-            try_api(self._parse_api_local(url), "local"),
             try_api(self._parse_api_xinyew(url), "xinyew"),
-            try_api(self._parse_api_makuo(url), "makuo"),
             try_api(self._parse_api_xhus(url), "xhus"),
-            try_api(self._parse_api_mmp(url), "mmp"),
+            try_api(self._parse_api_makuo(url), "makuo"),
         ]
 
         try:
