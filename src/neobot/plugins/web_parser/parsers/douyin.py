@@ -366,6 +366,34 @@ class DouyinParser(BaseParser):
             desc = data.get("desc") or data.get("title") or data.get("content") or "无描述"
             cover = data.get("cover") or data.get("cover_url") or data.get("pic") or data.get("image") or ""
             like = data.get("like") or data.get("digg_count") or data.get("likes") or 0
+            data_type = data.get("type") or data.get("aweme_type") or ""
+
+            # 音乐：audio_url / music 字段统一整理
+            audio_url = (
+                data.get("audio_url")
+                or (data.get("music") or {}).get("url")
+                or (data.get("music") or {}).get("play_url")
+                or ""
+            )
+            music = data.get("music") or {}
+            if audio_url:
+                music = {
+                    "url": audio_url,
+                    "title": (music.get("title") if isinstance(music, dict) else None) or data.get("music_title") or "",
+                    "author": (music.get("author") if isinstance(music, dict) else None) or "",
+                }
+
+            # 视频直链（qzqi 完整格式：videos 数组或 video_url 单串）
+            videos = data.get("videos")
+            video_url = (
+                data.get("video_url")
+                or (videos[0] if isinstance(videos, list) and videos else "")
+                or data.get("video")
+                or data.get("url")
+                or data.get("play_addr")
+                or data.get("play_url")
+                or ""
+            ).strip()
 
             # 图集：images 列表 / pics / image_list / slides
             image_list = (
@@ -384,6 +412,26 @@ class DouyinParser(BaseParser):
                         if item.get(k):
                             image_urls.append(item[k])
                             break
+
+            # 类型判定：
+            #   - 有视频直链时优先作为视频（含 live_photo 实况照片，动态效果更佳）
+            #   - 否则若有图集图片则作为图集
+            if video_url:
+                return {
+                    "type": "video",
+                    "video_url": video_url,
+                    "video_url_HQ": video_url,
+                    "nickname": nickname,
+                    "desc": desc,
+                    "aweme_id": data.get("aweme_id") or data.get("id") or data.get("video_id") or "",
+                    "like": like,
+                    "cover": cover,
+                    "time": data.get("time") or data.get("create_time") or 0,
+                    "author_avatar": data.get("avatar") or data.get("author_avatar") or "",
+                    "music": music,
+                    "images": image_urls if data_type in ("image", "note", "live_photo") else [],
+                }
+
             if image_urls:
                 logger.info(f"[{self.name}] qzqi DouYinVideo 解析为图集，共 {len(image_urls)} 张图片")
                 return {
@@ -397,37 +445,12 @@ class DouyinParser(BaseParser):
                     "cover": cover,
                     "time": data.get("time") or data.get("create_time") or 0,
                     "author_avatar": data.get("avatar") or data.get("author_avatar") or "",
-                    "music": data.get("music") or {},
+                    "music": music,
                     "images": image_urls,
                 }
 
-            # 视频：多种直链字段兼容
-            video_url = (
-                data.get("video_url")
-                or data.get("video")
-                or data.get("url")
-                or data.get("play_addr")
-                or data.get("play_url")
-                or ""
-            ).strip()
-            if not video_url:
-                logger.error(f"[{self.name}] qzqi DouYinVideo 未找到视频直链/图集")
-                return None
-
-            return {
-                "type": "video",
-                "video_url": video_url,
-                "video_url_HQ": video_url,
-                "nickname": nickname,
-                "desc": desc,
-                "aweme_id": data.get("aweme_id") or data.get("id") or data.get("video_id") or "",
-                "like": like,
-                "cover": cover,
-                "time": data.get("time") or data.get("create_time") or 0,
-                "author_avatar": data.get("avatar") or data.get("author_avatar") or "",
-                "music": data.get("music") or {},
-                "images": [],
-            }
+            logger.error(f"[{self.name}] qzqi DouYinVideo 未找到视频直链/图集")
+            return None
 
         except Exception as e:
             logger.error(f"[{self.name}] qzqi DouYinVideo 解析失败: {e}")
