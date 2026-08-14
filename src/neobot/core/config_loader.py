@@ -325,6 +325,13 @@ class Config:
         """
         return self._model.mcc_adapter
 
+    @property
+    def douyin(self) -> DouyinModel:
+        """
+        获取抖音解析配置
+        """
+        return self._model.douyin
+
 
 # 实例化全局配置对象
 global_config = Config()
