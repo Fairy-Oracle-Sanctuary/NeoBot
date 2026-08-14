@@ -15,6 +15,8 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    environment:
+      name: package
     permissions:
       contents: read
       packages: write
@@ -30,7 +32,6 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # 从 git tag 或 commit SHA 派生镜像版本标签
       - name: Extract metadata for Docker
         id: meta
         uses: docker/metadata-action@v5
@@ -46,15 +47,13 @@ jobs:
           flavor: |
             latest=false
 
-      # 登录 GitHub Container Registry
-      # 优先使用自定义 TOKEN（如 PAT），否则使用默认 GITHUB_TOKEN
       - name: Log in to GitHub Container Registry
         if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
-          password: ${{ secrets.TOKEN || secrets.GITHUB_TOKEN }}   # 关键改动：支持自定义 TOKEN
+          password: ${{ secrets.TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Build and push image
         id: build
@@ -66,11 +65,9 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          # 如果 Dockerfile 需要 TOKEN 作为构建参数，可取消注释下一行
-          # build-args: |
-          #   TOKEN=${{ secrets.TOKEN || '' }}
+          build-arg: |
+            COMMIT_SHA=${{ github.sha }}
 
-      # 打印构建产物摘要
       - name: Image digest
         if: github.event_name != 'pull_request'
-        run: echo ${{ steps.build.outputs.digest }}
+        run: echo "Image digest: ${{ steps.build.outputs.digest }}"
