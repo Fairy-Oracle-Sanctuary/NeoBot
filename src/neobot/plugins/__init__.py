@@ -16,6 +16,7 @@ from . import github_parser
 from . import group_welcome
 from . import jrcd
 from . import mirror_avatar
+from . import music
 from . import thpic
 from . import twitter_parser
 from . import weather
@@ -33,6 +34,7 @@ __all__ = [
     "group_welcome",
     "jrcd",
     "mirror_avatar",
+    "music",
     "thpic",
     "twitter_parser",
     "weather",
