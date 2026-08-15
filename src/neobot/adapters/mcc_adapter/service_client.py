@@ -154,6 +154,30 @@ class MccServiceClient:
         )
         return data if isinstance(data, dict) else {"success": False, "message": str(data)}
 
+    # ── 永久租赁人工审核（admin/service_token 鉴权，仅内部 8800）──
+
+    async def rental_pending(self) -> Dict[str, Any]:
+        """
+        GET /api/rental/pending：列出全部待审核的永久租赁申请（仅 admin）。
+        返回 {"success": true, "pending": [...], "count": n}
+        """
+        data = await self._get("/api/rental/pending")
+        return data if isinstance(data, dict) else {"success": False, "message": str(data)}
+
+    async def rental_approve(self, qq: str) -> Dict[str, Any]:
+        """
+        POST /api/rental/approve：人工审核通过某 QQ 的永久租赁申请（仅 admin）。
+        """
+        data = await self._post("/api/rental/approve", {"qq": str(qq)})
+        return data if isinstance(data, dict) else {"success": False, "message": str(data)}
+
+    async def rental_reject(self, qq: str) -> Dict[str, Any]:
+        """
+        POST /api/rental/reject：人工拒绝某 QQ 的永久租赁申请（仅 admin）。
+        """
+        data = await self._post("/api/rental/reject", {"qq": str(qq)})
+        return data if isinstance(data, dict) else {"success": False, "message": str(data)}
+
     # ── /mcc 指令转发（auth_token 鉴权，真实 QQ 由 body/query 传入）──
 
     async def mcc_instances(self, qq: str) -> Dict[str, Any]:
