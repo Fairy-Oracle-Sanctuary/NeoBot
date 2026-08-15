@@ -28,6 +28,10 @@ class InputValidator:
             re.compile(r"(?i)(['\"]\s*(or|and)\s+['\"]?\d+['\"]?\s*=\s*['\"]?\d+)"),
             # UNION 注入：union select
             re.compile(r"(?i)\bunion\b\s+\bselect\b"),
+            # 裸 SELECT 读取语句（默认视为危险；allow_safe_keywords=True 时放行）
+            re.compile(r"(?i)\bselect\b.*\bfrom\b"),
+            # 裸 DDL/DML 关键字（DROP/DELETE 等，默认视为危险）
+            re.compile(r"(?i)\b(drop|truncate|delete|alter|insert|update|create|exec|execute)\s"),
             # 注释符序列
             re.compile(r"(--\s|/\*|\*/|;--|#--)"),
             # 危险的堆叠查询分隔符（仅在 SQL 上下文中才应触发）
