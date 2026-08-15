@@ -24,8 +24,8 @@ from neobot.models.message import MessageSegment
 # 网易云解析服务地址（neobot 为 host 网络，与网易云服务同主机）：
 #   部署在 192.168.1.11 -> host 网络下容器内等价 127.0.0.1
 NETEASE_BASE = "http://127.0.0.1:5000"
-# 点歌默认音质（QQ 语音转码友好，mp3 而非无损 FLAC）
-DEFAULT_QUALITY = "exhigh"
+# 点歌默认音质（无损 FLAC）
+DEFAULT_QUALITY = "lossless"
 # 单次搜索返回给用户的候选数量
 SEARCH_LIMIT = 10
 # 选歌标记有效期（秒）
