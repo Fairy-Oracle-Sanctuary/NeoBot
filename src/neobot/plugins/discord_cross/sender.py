@@ -35,6 +35,12 @@ async def send_to_discord(channel_id: int, content: str, attachments: List[dict]
 async def send_to_qq(group_id: int, content: str, attachments: List[dict] = None):
     """发送消息到 QQ 群"""
     try:
+        # 群管理开关：目标群关闭了「主动推送」则跳过互通转发
+        from neobot.plugins.group_manage import is_feature_enabled
+        if not await is_feature_enabled(group_id, "push"):
+            logger.debug(f"[CrossPlatform] QQ群 {group_id} 已关闭主动推送，跳过互通转发")
+            return
+
         logger.debug(f"[CrossPlatform:TRACE] send_to_qq: group={group_id}, content='{content[:80] if content else ''}...', attachments={len(attachments or [])}")
         from neobot.core.managers.bot_manager import bot_manager
         from neobot.models.message import MessageSegment

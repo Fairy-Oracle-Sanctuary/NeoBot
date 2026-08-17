@@ -29,6 +29,13 @@ async def handle_web_links(event: MessageEvent):
     Args:
         event (MessageEvent): 消息事件对象
     """
+    # 群管理开关：该群关闭了「视频解析」则跳过自动解析（仅群消息生效）
+    group_id = getattr(event, "group_id", None)
+    if group_id:
+        from neobot.plugins.group_manage import is_feature_enabled
+        if not await is_feature_enabled(group_id, "video_parse"):
+            return
+
     # 按顺序尝试各个解析器
     # 1. 尝试B站解析器
     await bili_parser.handle_message(event)

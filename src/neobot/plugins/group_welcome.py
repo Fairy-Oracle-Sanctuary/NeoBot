@@ -24,7 +24,13 @@ async def handle_group_increase(bot: Bot, event: GroupIncreaseNoticeEvent):
     """
     if event.user_id != event.self_id:
         return
-    
+
+    # 群管理开关：目标群关闭了「主动推送」则跳过入群提醒
+    from neobot.plugins.group_manage import is_feature_enabled
+    group_id = getattr(event, "group_id", None)
+    if group_id and not await is_feature_enabled(group_id, "push"):
+        return
+
     welcome_message = (
         f"我已加入本群！👋\n"
         f"\n"
