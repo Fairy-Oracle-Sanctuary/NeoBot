@@ -120,6 +120,20 @@ async def main():
     # 初始化 Redis 连接
     await redis_manager.initialize()
 
+    # 启动晚风人永久租赁审核轮询（后台任务：30s 轮询待审申请 → 私聊推送管理员）
+    try:
+        from neobot.plugins.wanfeng_review import start as start_wanfeng_review
+        await start_wanfeng_review()
+    except Exception as e:
+        logger.exception(f"启动晚风人审核轮询失败: {e}")
+
+    # 启动晚风群成员同步（后台任务：10min 拉取群成员 → 覆盖 Redis 集合，供 is_wanfeng 判定）
+    try:
+        from neobot.plugins.wanfeng_members import start as start_wanfeng_members
+        await start_wanfeng_members()
+    except Exception as e:
+        logger.exception(f"启动晚风群成员同步失败: {e}")
+
     # 启动跨平台消息订阅（Discord ↔ QQ，依赖 Redis）
     from neobot.plugins.discord_cross import start as start_cross_platform
     try:
