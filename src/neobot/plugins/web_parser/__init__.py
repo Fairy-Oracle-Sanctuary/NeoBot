@@ -5,11 +5,12 @@ from neobot.models import MessageEvent
 from .parsers.bili import BiliParser
 from .parsers.douyin import DouyinParser
 from .parsers.github import GitHubParser
+from .parsers.xhs import XhsParser
 
 # 插件元信息
 __plugin_meta__ = {
     "name": "web_parser",
-    "description": "自动解析各种Web链接，包括B站、抖音和GitHub仓库",
+    "description": "自动解析各种Web链接，包括B站、抖音、小红书和GitHub仓库",
     "usage": "（自动触发）当检测到支持的链接时，自动进行解析"
 }
 
@@ -17,6 +18,7 @@ __plugin_meta__ = {
 bili_parser = BiliParser()
 douyin_parser = DouyinParser()
 github_parser = GitHubParser()
+xhs_parser = XhsParser()
 
 
 @matcher.platform_message(["qq", "discord"], block=False)
@@ -33,8 +35,11 @@ async def handle_web_links(event: MessageEvent):
     
     # 2. 尝试抖音解析器
     await douyin_parser.handle_message(event)
+
+    # 3. 尝试小红书解析器
+    await xhs_parser.handle_message(event)
     
-    # 3. 尝试GitHub解析器
+    # 4. 尝试GitHub解析器
     await github_parser.handle_message(event)
 
 
