@@ -1,27 +1,39 @@
 """
 版本查询插件
 
-提供 /ver 指令：读取构建时写入的版本哈希（/app/versions）。
-/versions 和 /ver 均可使用（别名）。
+提供 /ver 指令：
+- 读取构建时写入的版本哈希（/app/versions）
+- 查询 GitHub 仓库 main 分支的最新提交哈希（GitHub API，5 分钟缓存）
+- 对比并提示是否已是最新
 
-版本哈希由 GitHub Actions 构建时通过 COMMIT_SHA 写入 Dockerfile 生成。
+/versions 和 /ver 均可使用（别名）。
 """
 import os
 
+import aiohttp
+
+from cachetools import TTLCache
+
 from neobot.core.managers.command_manager import matcher
 from neobot.core.bot import Bot
+from neobot.core.utils.logger import logger
 from neobot.models.events.message import MessageEvent
 
 __plugin_meta__ = {
     "name": "version",
-    "description": "查询当前版本哈希（/ver）",
-    "usage": "/ver - 查看当前运行的版本哈希\n/versions - 同 /ver",
+    "description": "查询当前版本哈希与 GitHub 最新哈希（/ver）",
+    "usage": "/ver - 查看当前版本与 GitHub 最新版本\n/versions - 同 /ver",
 }
 
 # 版本文件路径（Dockerfile 构建时写入）
 VERSION_FILE = "/app/versions"
 # 兜底：老镜像的 commit-sha 文件
 _COMMIT_SHA_FILE = "/app/commit-sha"
+
+# GitHub 仓库与 API（公开仓库无需 token，60 次/小时限流，缓存 5 分钟）
+_GITHUB_REPO = "Fairy-Oracle-Sanctuary/NeoBot"
+_GITHUB_API = f"https://api.github.com/repos/{_GITHUB_REPO}/commits/main"
+_remote_cache = TTLCache(maxsize=1, ttl=300)
 
 
 def _read_version_file() -> str:
@@ -38,14 +50,51 @@ def _read_version_file() -> str:
     return ""
 
 
+async def _get_remote_sha() -> str:
+    """查询 GitHub main 分支最新 commit SHA；失败返回空串。"""
+    cached = _remote_cache.get("sha")
+    if isinstance(cached, str) and cached:
+        return cached
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(_GITHUB_API, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    sha = (data or {}).get("sha", "")
+                    if sha:
+                        _remote_cache["sha"] = sha
+                        return sha
+                else:
+                    logger.warning(f"[version] GitHub API 返回 {resp.status}")
+    except Exception as e:
+        logger.warning(f"[version] GitHub API 查询失败: {type(e).__name__}: {e}")
+    return ""
+
+
 @matcher.platform_command(["qq", "discord"], "ver")
 async def handle_ver(bot: Bot, event: MessageEvent, args: list[str]):
-    """处理 /ver 指令，返回版本哈希。"""
-    version = _read_version_file()
-    if version:
-        await event.reply(f"🔖 当前版本：`{version}`")
+    """处理 /ver 指令，返回本地版本哈希与 GitHub 最新哈希。"""
+    local = _read_version_file()
+    remote = await _get_remote_sha()
+
+    lines = []
+    if local:
+        lines.append(f"🔖 当前版本：`{local}`")
     else:
-        await event.reply("❌ 无法获取版本信息（镜像中未写入版本文件）")
+        lines.append("❌ 无法获取版本信息（镜像中未写入版本文件）")
+
+    if remote:
+        if not local:
+            status = "（本地版本未知，无法对比）"
+        elif local == remote:
+            status = "✅ 已是最新"
+        else:
+            status = "🔄 有新版本，等待自动部署"
+        lines.append(f"🌐 GitHub 最新：`{remote}` {status}")
+    else:
+        lines.append("🌐 GitHub 最新：查询失败（网络异常或限流，稍后再试）")
+
+    await event.reply("\n".join(lines))
 
 
 @matcher.platform_command(["qq", "discord"], "versions")
