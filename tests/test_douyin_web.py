@@ -63,18 +63,25 @@ def test_extract_image_set():
     assert r["cover"] == "https://p1.douyinpic.com/1.jpg"
 
 
-def test_extract_image_strips_tplv_suffix():
-    """图集 URL 剥离 ~tplv-xxx 模板后缀（模板 URL 偶发 403，原图最稳）。"""
+def test_extract_image_keeps_signed_url():
+    """图集 URL 原样保留（含 ~tplv 模板段与 x-signature 签名参数）。
+
+    剥离模板段会连签名参数一起剥掉 → 裸 URL 403（生产实测），
+    url_list 返回的完整地址本身就是可下载的。
+    """
     item = _video_item()
     item["video"] = {}
+    signed = ("https://p3-pc-sign.douyinpic.com/tos-cn-i-0813c000-ce/abc123"
+              "~tplv-dy-aweme-images-v2:3000?lk3s=138a59ce&x-expires=1788253200"
+              "&x-signature=oUFzD0slTsIe5SuvK%2FMEVm%2BdenQ%3D")
     item["images"] = [
-        {"url_list": ["https://p3-pc-sign.douyinpic.com/tos-cn-i-0813c000-ce/abc123~tplv-dy-aweme-images-v2:3000"]},
-        {"url_list": ["https://p9-pc-sign.douyinpic.com/tos-cn-i-0813c000-ce/def456~tplv-dy-aweme-images-v2:1080"]},
+        {"url_list": [signed]},
+        {"url_list": ["https://p9-pc-sign.douyinpic.com/tos-cn-i-0813c000-ce/def456"]},
     ]
     r = _extract_result(item)
     assert r is not None
     assert r["images"] == [
-        "https://p3-pc-sign.douyinpic.com/tos-cn-i-0813c000-ce/abc123",
+        signed,  # 原样保留，不剥离
         "https://p9-pc-sign.douyinpic.com/tos-cn-i-0813c000-ce/def456",
     ]
 

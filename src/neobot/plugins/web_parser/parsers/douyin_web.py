@@ -44,9 +44,6 @@ _TTWID_TTL = 12 * 3600
 # aweme_id 提取：/video/<id> 或 /note/<id>
 _AWEME_RE = re.compile(r"/(?:video|note)/(\d{15,20})")
 
-# 图片模板后缀（~tplv-xxx[:宽高]）：剥离后为原图直链，避免模板 URL 偶发 403
-_TPL_SUFFIX_RE = re.compile(r"~tplv-[^/]*$")
-
 
 class _State:
     """模块级可变状态：全局会话、浏览器指纹、ttwid 缓存。"""
@@ -195,6 +192,8 @@ def _extract_result(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     # 动态图文（live_photo_type=1）的每张图还带动态视频直链（img.video.play_addr），
     # 一并提取到 image_videos（与 images 一一对应，无动态视频的图为 ""），
     # 发送时优先按视频（动效完整），静态图作兜底。
+    # ⚠️ URL 必须原样保留：url_list 里的地址自带 x-signature 签名参数，
+    #    剥离模板段会连签名一起剥掉 → 裸 URL 403（生产实测）。
     images = []
     image_videos = []
     for img in item.get("images") or []:
@@ -202,9 +201,7 @@ def _extract_result(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         url = _first_url(img.get("url_list"))
         if not url:
             continue
-        # 剥离 ~tplv-xxx 图片模板后缀：带模板参数的 URL 会偶发 403（防盗链），
-        # 原图直链最稳（2026-08 实测：同图模板 URL 403 而原图 200）
-        images.append(_TPL_SUFFIX_RE.sub("", url))
+        images.append(url)
         img_video = img.get("video") or {}
         img_videos_url = ""
         if isinstance(img_video, dict):
