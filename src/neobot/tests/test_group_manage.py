@@ -7,7 +7,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from neobot.core.managers.command_manager import matcher
 from neobot.plugins import group_manage
 from neobot.plugins.group_manage import (
-    FEATURES,
     is_feature_enabled,
     handle_group_manage,
     _parse_args,
@@ -130,15 +129,18 @@ class TestPermission:
         # 未被修改，仍为默认开启
         assert await is_feature_enabled(10001, "push") is True
         event.reply.assert_called_once()
-        assert "只有群主/管理员" in event.reply.call_args[0][0]
+        assert "只有本群的群主/管理员" in event.reply.call_args[0][0]
 
     @pytest.mark.asyncio
-    async def test_normal_member_can_view(self, fake_redis):
+    async def test_normal_member_cannot_view(self, fake_redis):
+        """整个 /群管 指令（含查看）仅限本群群主/管理员。"""
         bot = _make_bot(role="member")
         event = _make_event()
         await handle_group_manage(bot, event, [])
         event.reply.assert_called_once()
-        assert "功能开关" in event.reply.call_args[0][0]
+        assert "只有本群的群主/管理员" in event.reply.call_args[0][0]
+        # 未返回开关状态内容
+        assert "功能开关" not in event.reply.call_args[0][0]
 
     @pytest.mark.asyncio
     async def test_private_chat_rejected(self, fake_redis):
@@ -153,8 +155,6 @@ class TestRedisFailure:
     @pytest.mark.asyncio
     async def test_read_failure_falls_open(self, fake_redis):
         """Redis 读取失败时功能保守地视为开启（不误伤正常功能）。"""
-        bot = _make_bot()
-        event = _make_event()
         # 让 hget 抛异常
         fake_redis.hget = AsyncMock(side_effect=RuntimeError("redis down"))
         assert await is_feature_enabled(10001, "video_parse") is True

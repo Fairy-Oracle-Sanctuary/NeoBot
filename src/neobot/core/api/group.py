@@ -245,13 +245,13 @@ class GroupAPI(BaseAPI):
                 if cached is None:
                     await redis_manager.redis.delete(cache_key)
                 else:
-                    return GroupMemberInfo(**cached)
+                    return GroupMemberInfo.from_dict(cached)
 
         res = await self.call_api("get_group_member_info", {"group_id": group_id, "user_id": user_id})
         if res is None:
             raise RuntimeError(f"get_group_member_info 返回 None：group_id={group_id}, user_id={user_id}")
         await redis_manager.redis.set(cache_key, orjson.dumps(res), ex=3600)  # 缓存 1 小时
-        return GroupMemberInfo(**res)
+        return GroupMemberInfo.from_dict(res)
 
     async def get_group_member_list(self, group_id: int) -> List[GroupMemberInfo]:
         """
@@ -270,7 +270,7 @@ class GroupAPI(BaseAPI):
         if not isinstance(res, list):
             logger.error(f"get_group_member_list 返回非列表：group_id={group_id}, res={res}")
             return []
-        return [GroupMemberInfo(**item) for item in res if isinstance(item, dict)]
+        return [GroupMemberInfo.from_dict(item) for item in res if isinstance(item, dict)]
 
     async def get_group_honor_info(self, group_id: int, type: str) -> GroupHonorInfo:
         """

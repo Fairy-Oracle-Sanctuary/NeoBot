@@ -1,5 +1,5 @@
 from neobot.models.message import MessageSegment
-from neobot.models.objects import GroupInfo, StrangerInfo
+from neobot.models.objects import GroupInfo, StrangerInfo, GroupMemberInfo
 
 class TestMessageSegment:
     def test_text_segment(self):
@@ -181,3 +181,25 @@ class TestObjects:
         user = StrangerInfo(**data)
         assert user.user_id == 111111
         assert user.nickname == "Stranger"
+
+    def test_group_member_info_from_dict_with_unknown_fields(self):
+        """NapCat 返回含 qq_level 等未知字段时 from_dict 不抛 TypeError。"""
+        data = {
+            "group_id": 123456,
+            "user_id": 2221577113,
+            "nickname": "群主",
+            "role": "owner",
+            "qq_level": 65,          # NapCat 新增字段，旧代码 GroupMemberInfo(**data) 会炸
+            "some_future_field": "x",  # 未来可能再出现的未知字段
+        }
+        member = GroupMemberInfo.from_dict(data)
+        assert member.group_id == 123456
+        assert member.user_id == 2221577113
+        assert member.role == "owner"  # 权限判断依赖 role
+        assert member.qq_level == 65
+
+    def test_group_member_info_from_dict_role_values(self):
+        """role 字段原样保留：owner/admin/member 与 OneBot 标准一致。"""
+        for role in ("owner", "admin", "member"):
+            member = GroupMemberInfo.from_dict({"user_id": 1, "role": role})
+            assert member.role == role

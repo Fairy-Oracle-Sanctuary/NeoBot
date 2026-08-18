@@ -3,7 +3,7 @@ API 响应数据模型模块
 
 定义了 API 返回的数据结构。
 """
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from typing import List, Optional
 
 
@@ -80,6 +80,21 @@ class GroupMemberInfo:
     
     card_changeable: bool = False
     """是否允许修改群名片"""
+
+    qq_level: int = 0
+    """QQ 群等级（NapCat 新版返回该字段）"""
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "GroupMemberInfo":
+        """
+        从 API 返回构造成员信息，过滤未知字段。
+
+        OneBot 实现（如 NapCat）可能返回模型未定义的额外字段
+        （如 qq_level、level 等），直接 `GroupMemberInfo(**data)` 会抛
+        TypeError。过滤后仅取模型已知字段，未知字段静默忽略。
+        """
+        known = {f.name for f in fields(cls)}
+        return cls(**{k: v for k, v in data.items() if k in known})
 
 
 @dataclass(slots=True)

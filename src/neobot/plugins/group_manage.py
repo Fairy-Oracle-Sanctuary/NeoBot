@@ -126,7 +126,7 @@ async def handle_group_manage(bot, event, args):
     """
     处理 /群管 指令。
 
-    仅群聊内可用，且仅群主/管理员可操作。
+    仅群聊内可用，且仅本群群主/管理员可触发（含查看）。
     用法：
       /群管            查看本群开关状态
       /群管 开 <功能>   开启功能
@@ -137,6 +137,11 @@ async def handle_group_manage(bot, event, args):
         await event.reply("该指令仅在群聊中可用。")
         return
 
+    # 整个指令仅限本群群主/管理员（含查看）
+    if not await _is_group_admin(bot, event):
+        await event.reply("只有本群的群主/管理员才能使用 /群管。")
+        return
+
     action, feature_arg = _parse_args(args)
     # _parse_args 的错误返回：action 为 None，feature_arg 携带错误文案
     if action is None and feature_arg is not None:
@@ -144,11 +149,6 @@ async def handle_group_manage(bot, event, args):
         return
     if action is None:
         await event.reply(await _format_status(group_id))
-        return
-
-    # 开/关操作：仅群主/管理员
-    if not await _is_group_admin(bot, event):
-        await event.reply("只有群主/管理员才能修改本群的功能开关。")
         return
 
     enabled = action in ("开", "开启", "on")
