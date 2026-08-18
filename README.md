@@ -166,4 +166,4 @@ docker compose logs -f
 - 部署请复制 `config.example.toml` 为 `config.toml` 填写，或通过环境变量注入（`MYSQL_*` / `REDIS_*` / `NAPCAT_WS_*` / `DISCORD_TOKEN` 等，见 `src/neobot/core/config_loader.py`）
 - `ca/` 私有证书不包含在本仓库
 
-发现任何安全漏洞，请通过 Issue 或邮件私下报告，多谢。
+发现安全漏洞，请按 [SECURITY.md](SECURITY.md) 的流程私下报告（GitHub Security Advisory 或邮件），多谢。
