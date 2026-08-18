@@ -1,0 +1,11 @@
+# Ruff 配置:CI 门禁聚焦真实错误(Pyflakes F 类:未定义/未使用/未导入)
+# 历史代码的风格问题(格式/命名/类型注解风格 UP/EXE/BLE 等)不阻塞门禁,
+# 避免每次改动被存量风格问题卡住。
+[lint]
+select = ["F"]
+
+[lint.per-file-ignores]
+# douyin_abogus.py 来自 f2 项目 (Johnserf-Seed/f2, Apache-2.0) 原样算法:
+# F821 为静态误报——value_e 在 for 循环 index=0 迭代末尾赋值,
+# else 分支(index>=1)使用的是上一次迭代的延迟初始化变量,运行时已定义。
+"src/neobot/plugins/web_parser/parsers/douyin_abogus.py" = ["F821"]

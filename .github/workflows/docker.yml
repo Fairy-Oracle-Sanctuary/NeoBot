@@ -13,8 +13,53 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # 全量历史:push 路径 diff HEAD~1、PR 路径 merge-base 都需要父提交
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Ruff lint (changed files only)
+        run: |
+          pip install ruff
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            # 只用环境变量取 base_ref(不用表达式,防注入),并做白名单校验
+            BASE="${GITHUB_BASE_REF:-main}"
+            case "$BASE" in
+              *[!A-Za-z0-9_./-]*) echo "非法 base_ref: $BASE" >&2; exit 1 ;;
+            esac
+            if git rev-parse --verify "origin/$BASE" >/dev/null 2>&1; then
+              CHANGED=$(git diff --name-only "origin/$BASE"...HEAD -- '*.py' | tr '\n' ' ')
+            else
+              CHANGED=$(git diff --name-only HEAD~1 HEAD -- '*.py' | tr '\n' ' ')
+            fi
+          else
+            CHANGED=$(git diff --name-only HEAD~1 HEAD -- '*.py' | tr '\n' ' ')
+          fi
+          if [ -n "$CHANGED" ]; then
+            ruff check -- $CHANGED
+          else
+            echo "No Python files changed, skip lint"
+          fi
+
+      - name: Run tests
+        run: python -m pytest --tb=short -q
+
   build:
     runs-on: ubuntu-latest
+    needs: [test]
     environment:
       name: package
     permissions:
