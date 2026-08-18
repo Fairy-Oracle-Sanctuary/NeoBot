@@ -188,18 +188,14 @@ class XhsParser(BaseParser):
         nodes.append(text_node)
 
         media_success = False
-        direct_message = None
 
         if data.get("type") == "image" and isinstance(data.get("images"), list) and data["images"]:
             # ---- 图集：每张图片单独一个转发节点（CDN 防盗链，逐张本地中转）----
             images = data["images"]
             logger.info(f"[{self.name}] 发送图集，共 {len(images)} 张")
-            local_first = None
             for idx, img_url in enumerate(images, 1):
                 try:
                     local_url = await self._download_media(img_url)
-                    if idx == 1:
-                        local_first = local_url
                     img_node = event.bot.build_forward_node(
                         user_id=event.self_id,
                         nickname=self.nickname,
@@ -211,21 +207,14 @@ class XhsParser(BaseParser):
                     nodes.append(img_node)
                 except Exception as e:
                     logger.warning(f"[{self.name}] 无法添加图集第 {idx} 张: {e}")
-            # 直接发送第一张
-            if images:
-                try:
-                    await event.reply(MessageSegment.image(local_first or images[0]))
-                except Exception as e:
-                    logger.error(f"[{self.name}] 直接发送图集首图失败: {e}")
             media_success = True
         else:
-            # ---- 视频 ----
+            # ---- 视频（媒体只在合并转发内展示，不单独直接发）----
             try:
                 video_url = data.get("video_url")
                 if video_url:
                     local_url = await self._download_media(video_url)
                     video_message = MessageSegment.video(local_url or video_url)
-                    direct_message = video_message
                     video_node = event.bot.build_forward_node(
                         user_id=event.self_id,
                         nickname=self.nickname,
@@ -243,13 +232,6 @@ class XhsParser(BaseParser):
                 message="解析成功，但无法获取媒体直链。",
             )
             nodes.append(no_media_node)
-
-        # 同时直接发送媒体（如果获取到直链）
-        if direct_message:
-            try:
-                await event.reply(direct_message)
-            except Exception as e:
-                logger.error(f"[{self.name}] 直接发送媒体失败: {e}")
 
         return nodes
 

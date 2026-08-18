@@ -665,14 +665,8 @@ class BiliParser(BaseParser):
             event.bot.build_forward_node(user_id=event.self_id, nickname=self.nickname, message=up_info_segment),
             event.bot.build_forward_node(user_id=event.self_id, nickname=self.nickname, message=video_message)
         ]
-        
-        # 同时直接发送视频（如果获取到直链）
-        if direct_url:
-            try:
-                await event.reply(MessageSegment.video(direct_url))
-            except Exception as e:
-                logger.error(f"[{self.name}] 直接发送视频失败: {e}")
-        
+
+        # 媒体只在合并转发内展示，不单独直接发
         return nodes
     
     def should_handle_url(self, url: str) -> bool:
