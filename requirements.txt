@@ -5,6 +5,8 @@ aiomysql==0.3.2
 discord.py==2.3.2
 bilibili-api-python==17.4.1
 cachetools==7.0.5
+curl_cffi==0.16.0  # 抖音逆向通道: TLS 指纹模拟(impersonate=chrome), 裸 TLS 会被风控
+gmssl==3.2.2  # 抖音 a_bogus 签名 SM3 哈希
 chromadb==1.5.8
 docker==7.1.0
 Jinja2==3.1.6

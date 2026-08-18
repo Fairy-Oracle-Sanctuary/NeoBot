@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import re
+import time
 import aiohttp
 import asyncio
 from typing import Optional, Dict, Any, List
@@ -12,6 +13,7 @@ from neobot.core.services.local_file_server import download_to_local
 from neobot.models import MessageEvent, MessageSegment
 from ..base import BaseParser
 from ..utils import extract_original_text
+from .douyin_web import parse_douyin_web
 from cachetools import TTLCache
 
 
@@ -458,8 +460,13 @@ class DouyinParser(BaseParser):
     
     async def parse(self, url: str) -> Optional[Dict[str, Any]]:
         """
-        解析抖音视频信息：优先尝试主解析通道（douyin2api → qzqi DouYinVideo），
-        全部失败后才并发尝试备用通道（xinyew / xhus / makuo）。
+        解析抖音视频信息：优先尝试主解析通道（网页版逆向 → qzqi DouYinVideo），
+        全部失败后才并发尝试备用通道（douyin2api / xinyew / xhus / makuo）。
+
+        网页版逆向通道（2026-08 新增）：免费、端到端 ~0.8s（短链重定向 0.5s +
+        API 0.26s + 签名 2ms），不依赖第三方限流，图文/视频/实况全支持。
+        aiohttp 裸 TLS 会被风控吞响应，必须走 curl_cffi impersonate=chrome
+        （见 douyin_web.py）。
 
         Args:
             url (str): 抖音视频URL
@@ -469,20 +476,26 @@ class DouyinParser(BaseParser):
         """
         # 解析整体超时（秒），对标 Java 版的 OVERALL_TIMEOUT_SECONDS
         overall_timeout = 60
+        parse_start = time.monotonic()
 
         # ---- 主通道：依次串行尝试，命中即返回 ----
         primary_channels = [
-            ("douyin2api", self._parse_api_local(url)),
+            ("douyin_web", parse_douyin_web(url)),
             ("qzqi", self._parse_api_qzqi_douyin(url)),
         ]
-        for api_name, coro in primary_channels:
+        for idx, (api_name, coro) in enumerate(primary_channels):
             try:
                 result = await coro
             except Exception as e:
                 logger.error(f"[{self.name}] {api_name} API异常: {e}")
                 result = None
             if result:
+                # 关闭后续未执行的协程，避免 asyncio "never awaited" 泄漏警告
+                for _, leftover in primary_channels[idx + 1:]:
+                    leftover.close()
                 logger.info(f"[{self.name}] 使用 {api_name} API 成功解析")
+                result["_api_name"] = api_name
+                result["_parse_cost_ms"] = int((time.monotonic() - parse_start) * 1000)
                 return result
 
         # ---- 备用通道：并发兜底 ----
@@ -495,6 +508,7 @@ class DouyinParser(BaseParser):
                 return (None, api_name)
 
         tasks = [
+            try_api(self._parse_api_local(url), "douyin2api"),
             try_api(self._parse_api_xinyew(url), "xinyew"),
             try_api(self._parse_api_xhus(url), "xhus"),
             try_api(self._parse_api_makuo(url), "makuo"),
@@ -509,6 +523,8 @@ class DouyinParser(BaseParser):
                     break
                 if result:
                     logger.info(f"[{self.name}] 使用 {api_name} API 成功解析")
+                    result["_api_name"] = api_name
+                    result["_parse_cost_ms"] = int((time.monotonic() - parse_start) * 1000)
                     return result
         except asyncio.TimeoutError:
             logger.error(f"[{self.name}] 所有API解析超过 {overall_timeout}s 未返回有效结果")
@@ -567,6 +583,23 @@ class DouyinParser(BaseParser):
         # 构建回复消息
         text_parts = ["抖音视频解析"]
         text_parts.append("--------------------")
+
+        # 解析接口与耗时（parse() 注入的 _api_name / _parse_cost_ms）
+        api_name = data.get("_api_name", "")
+        cost_ms = int(data.get("_parse_cost_ms", 0) or 0)
+        if api_name:
+            api_display = {
+                "douyin_web": "网页逆向",
+                "qzqi": "远梦API",
+                "douyin2api": "douyin2api",
+                "xinyew": "xinyew",
+                "xhus": "xhus",
+                "makuo": "makuo",
+            }.get(api_name, api_name)
+            cost_str = f"{cost_ms / 1000:.1f}s" if cost_ms >= 1000 else f"{cost_ms}ms"
+            text_parts.append(f" 解析接口: {api_display}")
+            text_parts.append(f" 解析耗时: {cost_str}")
+            text_parts.append("--------------------")
         
         if original_text:
             text_parts.append(f" 分享内容: {original_text}")
