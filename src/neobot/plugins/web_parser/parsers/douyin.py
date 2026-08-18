@@ -566,6 +566,14 @@ class DouyinParser(BaseParser):
             logger.error(f"[{self.name}] 获取真实URL失败: {e}")
         return None
     
+    # 抖音 CDN 防盗链:下载必须带浏览器 UA + douyin Referer,
+    # 否则生产环境(douyinvod/douyinpic)直接 403 拒绝裸请求
+    _CDN_HEADERS = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                      "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+        "Referer": "https://www.douyin.com/",
+    }
+
     async def format_response(self, event: MessageEvent, data: Dict[str, Any]) -> List[Any]:
         """
         格式化抖音视频响应消息
@@ -637,12 +645,17 @@ class DouyinParser(BaseParser):
         # 添加封面图片节点（如果有）
         if data.get('cover'):
             try:
+                cover_url = data['cover']
+                try:
+                    cover_url = (await download_to_local(cover_url, timeout=30, headers=self._CDN_HEADERS)) or cover_url
+                except Exception:
+                    pass
                 cover_node = event.bot.build_forward_node(
                     user_id=event.self_id, 
                     nickname=self.nickname, 
                     message=[
                         MessageSegment.text("抖音视频封面：\n"),
-                        MessageSegment.image(data['cover'])
+                        MessageSegment.image(cover_url)
                     ]
                 )
                 nodes.append(cover_node)
@@ -652,12 +665,17 @@ class DouyinParser(BaseParser):
         # 添加作者头像节点（如果有）
         if data.get('author_avatar'):
             try:
+                avatar_url = data['author_avatar']
+                try:
+                    avatar_url = (await download_to_local(avatar_url, timeout=30, headers=self._CDN_HEADERS)) or avatar_url
+                except Exception:
+                    pass
                 avatar_node = event.bot.build_forward_node(
                     user_id=event.self_id, 
                     nickname=self.nickname, 
                     message=[
                         MessageSegment.text("作者头像：\n"),
-                        MessageSegment.image(data['author_avatar'])
+                        MessageSegment.image(avatar_url)
                     ]
                 )
                 nodes.append(avatar_node)
@@ -669,16 +687,23 @@ class DouyinParser(BaseParser):
         direct_message = None
 
         if data.get('type') == 'image' and isinstance(data.get('images'), list) and data['images']:
-            # ---- 图集：每张图片单独一个转发节点 ----
+            # ---- 图集：每张图片单独一个转发节点（同样走本地中转防防盗链 403）----
             images = data['images']
             logger.info(f"[{self.name}] 发送图集，共 {len(images)} 张")
-            for idx, img_url in enumerate(images, 1):
+            local_images = []
+            for img_url in images:
+                try:
+                    local_url = await download_to_local(img_url, timeout=60, headers=self._CDN_HEADERS)
+                    local_images.append(local_url or img_url)
+                except Exception:
+                    local_images.append(img_url)
+            for idx, img_url in enumerate(local_images, 1):
                 try:
                     img_node = event.bot.build_forward_node(
                         user_id=event.self_id,
                         nickname=self.nickname,
                         message=[
-                            MessageSegment.text(f"图集第 {idx}/{len(images)} 张：\n"),
+                            MessageSegment.text(f"图集第 {idx}/{len(local_images)} 张：\n"),
                             MessageSegment.image(img_url)
                         ]
                     )
@@ -686,13 +711,13 @@ class DouyinParser(BaseParser):
                 except Exception as e:
                     logger.warning(f"[{self.name}] 无法添加图集第 {idx} 张: {e}")
             # 直接发送第一张
-            if images:
+            if local_images:
                 try:
-                    await event.reply(MessageSegment.image(images[0]))
+                    await event.reply(MessageSegment.image(local_images[0]))
                 except Exception as e:
                     logger.error(f"[{self.name}] 直接发送图集首图失败: {e}")
             media_success = True
-            direct_message = MessageSegment.image(images[0]) if images else None
+            direct_message = MessageSegment.image(local_images[0]) if local_images else None
 
         else:
             # ---- 视频 ----
@@ -702,7 +727,7 @@ class DouyinParser(BaseParser):
                     # 先尝试下载到本地文件服务器中转（NapCat 独立容器时，直链可能
                     # 因防盗链/时效无法直接下载）；失败则回退原始直链
                     try:
-                        local_url = await download_to_local(video_url, timeout=120)
+                        local_url = await download_to_local(video_url, timeout=120, headers=self._CDN_HEADERS)
                         if local_url:
                             logger.info(f"[{self.name}] 视频已中转下载到本地: {local_url}")
                             video_url = local_url
