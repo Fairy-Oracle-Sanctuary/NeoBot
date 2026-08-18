@@ -499,7 +499,13 @@ class WS:
         
         try:
             await self.ws.send(orjson.dumps(payload).decode('utf-8'))
-            return await asyncio.wait_for(future, timeout=30.0)
+            # 合并转发/上传文件类操作: NapCat 需先下载节点内媒体文件(可能几十 MB),
+            # 30s 默认超时不够; 其余 API 保持 30s
+            if action in ("send_group_forward_msg", "send_private_forward_msg", "upload_group_file", "upload_private_file"):
+                timeout = 120.0
+            else:
+                timeout = 30.0
+            return await asyncio.wait_for(future, timeout=timeout)
         except asyncio.TimeoutError:
             with self._pending_requests_lock:
                 self._pending_requests.pop(echo_id, None)
