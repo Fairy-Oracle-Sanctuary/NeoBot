@@ -1,6 +1,10 @@
 # -*- coding: utf-8 -*-
+import os
 import re
 import time
+import shutil
+import subprocess
+import tempfile
 import aiohttp
 import asyncio
 from typing import Optional, Dict, Any, List
@@ -9,12 +13,20 @@ from urllib.parse import urlparse
 from neobot.core.utils.logger import logger
 from neobot.core.utils.input_validator import input_validator
 from neobot.core.config_loader import global_config as config
-from neobot.core.services.local_file_server import download_to_local
+from neobot.core.services.local_file_server import download_to_local, get_local_file_server
 from neobot.models import MessageEvent, MessageSegment
 from ..base import BaseParser
 from ..utils import extract_original_text
 from .douyin_web import parse_douyin_web
 from cachetools import TTLCache
+
+# ffmpeg 可用性标志（抖音动态图集 + BGM 合成需要）
+FFMPEG_AVAILABLE = False
+try:
+    subprocess.run(["ffmpeg", "-version"], capture_output=True, check=True, timeout=10)
+    FFMPEG_AVAILABLE = True
+except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+    logger.warning("[抖音解析器] ffmpeg 未安装，动态图集将不带背景音乐发送")
 
 
 class DouyinParser(BaseParser):
@@ -573,6 +585,167 @@ class DouyinParser(BaseParser):
                       "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
         "Referer": "https://www.douyin.com/",
     }
+    # 静态图集轮播合成视频的固定时长(秒)：图片序列循环到该时长
+    _STATIC_CLIP_SECONDS = 15
+
+    @staticmethod
+    def _local_url_to_path(server, local_url: str) -> Optional[os.PathLike]:
+        """把 local_file_server 的下载 URL（/download?id=xxx）还原成本地文件路径。"""
+        if not local_url or "/download?id=" not in local_url:
+            return None
+        file_id = local_url.rsplit("id=", 1)[-1]
+        path = server.file_map.get(file_id)
+        return path if path and path.exists() else None
+
+    async def _merge_album_video_music(
+        self,
+        video_urls: List[str],
+        music_local_url: str,
+        image_urls: Optional[List[str]] = None,
+    ) -> Optional[str]:
+        """
+        把图集合成单个带 BGM 的 mp4：
+        - 有动态视频：视频顺序连播拼接（时长 = 整组总长）
+        - 全静态图：每张固定展示 1.5s 轮播（时长 = N × 1.5s）
+        BGM 循环铺底，-shortest 截到视频总长。
+
+        Args:
+            video_urls: 动态视频直链列表（保持图集顺序）
+            music_local_url: 已下载到本地中转的音乐 URL
+            image_urls: 静态图直链列表（仅 video_urls 为空时使用）
+
+        Returns:
+            Optional[str]: 合成后视频的本地中转 URL；任何失败返回 None
+        """
+        if not FFMPEG_AVAILABLE:
+            return None
+        server = get_local_file_server()
+        if not server or server.site is None:
+            return None
+        out_path: Optional[str] = None
+        try:
+            music_path = self._local_url_to_path(server, music_local_url)
+            if not music_path:
+                return None
+
+            out_fd, out_path = tempfile.mkstemp(suffix=".mp4", dir=server.download_dir)
+            os.close(out_fd)
+            video_paths: List[os.PathLike] = []
+            success = False
+            try:
+                if video_urls:
+                    # ---- 动态图：下载视频后 concat 连播 ----
+                    for vu in video_urls:
+                        file_id = await server.download_file(vu, timeout=120, headers=self._CDN_HEADERS)
+                        if not file_id:
+                            return None
+                        video_paths.append(server.download_dir / file_id)
+                    result = None
+                    if len(video_paths) > 1:
+                        list_fd, list_path = tempfile.mkstemp(suffix=".txt", dir=server.download_dir)
+                        os.close(list_fd)
+                        try:
+                            with open(list_path, "w") as f:
+                                for p in video_paths:
+                                    f.write(f"file '{p}'\n")
+                            result = subprocess.run(
+                                ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", list_path,
+                                 "-stream_loop", "-1", "-i", str(music_path),
+                                 "-map", "0:v:0", "-map", "1:a:0",
+                                 "-c:v", "copy", "-c:a", "aac", "-shortest", str(out_path)],
+                                capture_output=True, text=True, timeout=120)
+                        finally:
+                            os.unlink(list_path)
+                    if result is None or result.returncode != 0:
+                        # filter concat 兜底（重编码，兼容参数不一致的片段）
+                        inputs = []
+                        for p in video_paths:
+                            inputs += ["-i", str(p)]
+                        inputs += ["-stream_loop", "-1", "-i", str(music_path)]
+                        fc = "".join(f"[{i}:v]" for i in range(len(video_paths)))
+                        fc += f"concat=n={len(video_paths)}:v=1:a=0[v]"
+                        result = subprocess.run(
+                            ["ffmpeg", "-y", *inputs, "-filter_complex", fc,
+                             "-map", "[v]", "-map", f"{len(video_paths)}:a",
+                             "-c:v", "libx264", "-preset", "veryfast", "-c:a", "aac",
+                             "-shortest", str(out_path)],
+                            capture_output=True, text=True, timeout=300)
+                elif image_urls:
+                    # ---- 静态图：每张 1.5s 轮播，固定 15s 总长。
+                    #      两遍法：先序列→一轮轮播段，再循环段+BGM(图片序列直接
+                    #      -stream_loop 会无限编码卡死；且图片可能是 WebP 但扩展名
+                    #      .jpg，需先统一转标准 jpg 再序列) ----
+                    img_paths = []
+                    for iu in image_urls:
+                        file_id = await server.download_file(iu, timeout=60, headers=self._CDN_HEADERS)
+                        if not file_id:
+                            return None
+                        img_paths.append(server.download_dir / file_id)
+                    seq_dir = tempfile.mkdtemp(dir=server.download_dir)
+                    seg_path = os.path.join(seq_dir, "seg.mp4")
+                    try:
+                        # 图片可能为 WebP(PNG 等)但扩展名 .jpg，统一转标准 jpg
+                        for i, p in enumerate(img_paths, 1):
+                            conv = os.path.join(seq_dir, f"img{i}.jpg")
+                            r1 = subprocess.run(
+                                ["ffmpeg", "-y", "-i", str(p), "-frames:v", "1", "-q:v", "2", conv],
+                                capture_output=True, text=True, timeout=60)
+                            if r1.returncode != 0 or not os.path.exists(conv):
+                                raise RuntimeError(f"图片转码失败: {r1.stderr[-200:]}")
+                        # 第一遍：序列 → 一轮轮播段（framerate 2/3 = 每帧 1.5s）
+                        r2 = subprocess.run(
+                            ["ffmpeg", "-y", "-framerate", "2/3", "-pattern_type", "sequence",
+                             "-start_number", "1", "-i", os.path.join(seq_dir, "img%d.jpg"),
+                             "-c:v", "libx264", "-preset", "veryfast", seg_path],
+                            capture_output=True, text=True, timeout=120)
+                        if r2.returncode != 0:
+                            raise RuntimeError(f"轮播段生成失败: {r2.stderr[-200:]}")
+                        # 第二遍：循环轮播段 + BGM → 固定 15s
+                        result = subprocess.run(
+                            ["ffmpeg", "-y",
+                             "-stream_loop", "-1", "-i", seg_path,
+                             "-stream_loop", "-1", "-i", str(music_path),
+                             "-map", "0:v:0", "-map", "1:a:0",
+                             "-c:v", "copy", "-c:a", "aac",
+                             "-t", str(self._STATIC_CLIP_SECONDS), str(out_path)],
+                            capture_output=True, text=True, timeout=120)
+                    finally:
+                        shutil.rmtree(seq_dir, ignore_errors=True)
+                else:
+                    return None
+
+                if result.returncode != 0:
+                    logger.error(f"[{self.name}] ffmpeg 合成失败: {result.stderr[-500:]}")
+                    return None
+                if os.path.getsize(out_path) == 0:
+                    logger.error(f"[{self.name}] ffmpeg 合成输出为空文件")
+                    return None
+
+                # 注册到本地文件服务器——必须在 finally 之前完成:
+                # 成功时 success=True 让 finally 跳过清理;失败(异常)时 finally 兜底删除
+                mix_key = f"dy-mix://{'|'.join(video_urls) or 'static'}|{music_local_url}"
+                file_id = server._generate_file_id(mix_key)
+                dest_path = server.download_dir / file_id
+                shutil.copy2(out_path, dest_path)
+                server.file_map[file_id] = dest_path
+                os.unlink(out_path)
+                success = True
+                logger.info(f"[{self.name}] 图集合成视频成功: {dest_path.stat().st_size} bytes")
+                return f"{server.base_url}/download?id={file_id}"
+
+            except subprocess.TimeoutExpired:
+                logger.error(f"[{self.name}] ffmpeg 合成超时")
+                return None
+            finally:
+                # 未成功注册时清理临时输出文件（覆盖所有失败 return/异常路径）
+                if not success and out_path and os.path.exists(out_path):
+                    os.unlink(out_path)
+
+        except Exception as e:
+            logger.error(f"[{self.name}] 图集合成异常: {type(e).__name__}: {e}")
+            if out_path and os.path.exists(out_path):
+                os.unlink(out_path)
+            return None
 
     async def format_response(self, event: MessageEvent, data: Dict[str, Any]) -> List[Any]:
         """
@@ -682,42 +855,102 @@ class DouyinParser(BaseParser):
             except Exception as e:
                 logger.warning(f"[{self.name}] 无法添加作者头像: {e}")
 
-        # 添加媒体内容节点（视频直链 / 图集图片）
+        # 添加媒体内容节点（视频直链 / 图集图片）——媒体只在合并转发内展示，不单独直接发
         media_success = False
-        direct_message = None
 
         if data.get('type') == 'image' and isinstance(data.get('images'), list) and data['images']:
-            # ---- 图集：每张图片单独一个转发节点（同样走本地中转防防盗链 403）----
+            # ---- 图集：优先 ffmpeg 合成为单个带 BGM 视频
+            #      （动态图连播 / 静态图 1.5s 轮播 15s），同时附全部图片；
+            #      合成失败回退逐张发送（动态视频优先，静态图兜底）。----
             images = data['images']
+            image_videos = data.get('image_videos') or []
             logger.info(f"[{self.name}] 发送图集，共 {len(images)} 张")
-            local_images = []
-            for img_url in images:
+
+            # 背景音乐：下载一次供合成复用
+            music_local = None
+            music_url = (data.get("music") or {}).get("url") or ""
+            if music_url:
                 try:
-                    local_url = await download_to_local(img_url, timeout=60, headers=self._CDN_HEADERS)
-                    local_images.append(local_url or img_url)
-                except Exception:
-                    local_images.append(img_url)
-            for idx, img_url in enumerate(local_images, 1):
+                    music_local = await download_to_local(music_url, timeout=60, headers=self._CDN_HEADERS)
+                except Exception as e:
+                    logger.warning(f"[{self.name}] 背景音乐下载失败: {e}")
+
+            dyn_urls = [
+                image_videos[i] for i in range(len(images))
+                if i < len(image_videos) and image_videos[i]
+            ]
+
+            merged = None
+            if music_local:
                 try:
-                    img_node = event.bot.build_forward_node(
+                    merged = await self._merge_album_video_music(
+                        dyn_urls, music_local, images if not dyn_urls else None
+                    )
+                except Exception as e:
+                    logger.warning(f"[{self.name}] 图集合成失败，回退逐张发送: {e}")
+
+            if merged:
+                # ---- 合成成功：转发 = 合成视频 + 全部图片 ----
+                try:
+                    video_node = event.bot.build_forward_node(
                         user_id=event.self_id,
                         nickname=self.nickname,
                         message=[
-                            MessageSegment.text(f"图集第 {idx}/{len(local_images)} 张：\n"),
-                            MessageSegment.image(img_url)
+                            MessageSegment.text(f"图集视频（共 {len(images)} 张）：\n"),
+                            MessageSegment.video(merged)
                         ]
                     )
-                    nodes.append(img_node)
+                    nodes.append(video_node)
                 except Exception as e:
-                    logger.warning(f"[{self.name}] 无法添加图集第 {idx} 张: {e}")
-            # 直接发送第一张
-            if local_images:
-                try:
-                    await event.reply(MessageSegment.image(local_images[0]))
-                except Exception as e:
-                    logger.error(f"[{self.name}] 直接发送图集首图失败: {e}")
-            media_success = True
-            direct_message = MessageSegment.image(local_images[0]) if local_images else None
+                    logger.warning(f"[{self.name}] 无法添加合成视频节点: {e}")
+                for idx, img_url in enumerate(images, 1):
+                    try:
+                        local_url = (await download_to_local(img_url, timeout=60, headers=self._CDN_HEADERS)) or img_url
+                        img_node = event.bot.build_forward_node(
+                            user_id=event.self_id,
+                            nickname=self.nickname,
+                            message=[
+                                MessageSegment.text(f"图集第 {idx}/{len(images)} 张：\n"),
+                                MessageSegment.image(local_url)
+                            ]
+                        )
+                        nodes.append(img_node)
+                    except Exception as e:
+                        logger.warning(f"[{self.name}] 无法添加图集第 {idx} 张: {e}")
+                media_success = True
+            else:
+                # ---- 回退：逐张发送（动态视频优先，静态图兜底）----
+                local_media = []  # (kind, url)：kind = "video" | "image"
+                for idx, img_url in enumerate(images):
+                    dyn_url = image_videos[idx] if idx < len(image_videos) else ""
+                    if dyn_url:
+                        try:
+                            local_url = await download_to_local(dyn_url, timeout=120, headers=self._CDN_HEADERS)
+                            if local_url:
+                                local_media.append(("video", local_url))
+                                continue
+                        except Exception:
+                            pass
+                    try:
+                        local_url = await download_to_local(img_url, timeout=60, headers=self._CDN_HEADERS)
+                        local_media.append(("image", local_url or img_url))
+                    except Exception:
+                        local_media.append(("image", img_url))
+                for idx, (kind, url) in enumerate(local_media, 1):
+                    try:
+                        seg = MessageSegment.video(url) if kind == "video" else MessageSegment.image(url)
+                        img_node = event.bot.build_forward_node(
+                            user_id=event.self_id,
+                            nickname=self.nickname,
+                            message=[
+                                MessageSegment.text(f"图集第 {idx}/{len(local_media)} 张：\n"),
+                                seg
+                            ]
+                        )
+                        nodes.append(img_node)
+                    except Exception as e:
+                        logger.warning(f"[{self.name}] 无法添加图集第 {idx} 张: {e}")
+                media_success = True
 
         else:
             # ---- 视频 ----
@@ -734,7 +967,6 @@ class DouyinParser(BaseParser):
                     except Exception as e:
                         logger.warning(f"[{self.name}] 视频中转下载失败，回退直链: {e}")
                     video_message = MessageSegment.video(video_url)
-                    direct_message = video_message
 
                     video_node = event.bot.build_forward_node(
                         user_id=event.self_id,
@@ -756,13 +988,6 @@ class DouyinParser(BaseParser):
                 message="解析成功，但无法获取媒体直链。"
             )
             nodes.append(no_media_node)
-
-        # 同时直接发送媒体（如果获取到直链）
-        if direct_message:
-            try:
-                await event.reply(direct_message)
-            except Exception as e:
-                logger.error(f"[{self.name}] 直接发送媒体失败: {e}")
 
         return nodes
     

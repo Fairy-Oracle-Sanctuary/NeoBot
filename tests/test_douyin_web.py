@@ -63,6 +63,46 @@ def test_extract_image_set():
     assert r["cover"] == "https://p1.douyinpic.com/1.jpg"
 
 
+def test_extract_image_strips_tplv_suffix():
+    """图集 URL 剥离 ~tplv-xxx 模板后缀（模板 URL 偶发 403，原图最稳）。"""
+    item = _video_item()
+    item["video"] = {}
+    item["images"] = [
+        {"url_list": ["https://p3-pc-sign.douyinpic.com/tos-cn-i-0813c000-ce/abc123~tplv-dy-aweme-images-v2:3000"]},
+        {"url_list": ["https://p9-pc-sign.douyinpic.com/tos-cn-i-0813c000-ce/def456~tplv-dy-aweme-images-v2:1080"]},
+    ]
+    r = _extract_result(item)
+    assert r is not None
+    assert r["images"] == [
+        "https://p3-pc-sign.douyinpic.com/tos-cn-i-0813c000-ce/abc123",
+        "https://p9-pc-sign.douyinpic.com/tos-cn-i-0813c000-ce/def456",
+    ]
+
+
+def test_extract_image_videos_for_dynamic_album():
+    """动态图文（live_photo_type=1）每张图提取动态视频直链到 image_videos。"""
+    item = _video_item()
+    item["video"] = {}
+    item["images"] = [
+        {"url_list": ["https://p1.douyinpic.com/1.jpg"],
+         "live_photo_type": 1,
+         "video": {"play_addr": {"url_list": ["https://v.douyinvod.com/dyn1.mp4"]}}},
+        {"url_list": ["https://p2.douyinpic.com/2.jpg"]},  # 无动态视频
+        {"url_list": ["https://p3.douyinpic.com/3.jpg"],
+         "video": {"play_addr": {},
+                   "bit_rate": [{"play_addr": {"url_list": ["https://v.douyinvod.com/dyn3.mp4"]}}]}},
+    ]
+    r = _extract_result(item)
+    assert r is not None
+    assert r["type"] == "image"
+    assert len(r["images"]) == 3
+    assert r["image_videos"] == [
+        "https://v.douyinvod.com/dyn1.mp4",
+        "",
+        "https://v.douyinvod.com/dyn3.mp4",
+    ]
+
+
 def test_extract_video_no_play_addr_falls_back_to_bit_rate():
     """play_addr 缺失时从 bit_rate 兜底取地址。"""
     item = _video_item()
@@ -99,6 +139,38 @@ def test_extract_missing_author_fields():
     assert r["nickname"] == "未知作者"
     assert r["like"] == 0
     assert r["author_avatar"] == ""
+
+
+def test_extract_live_photo_prefers_video():
+    """实况照片(aweme_type=51): 有动态视频时按视频发送。"""
+    item = _video_item(aweme_type=51)
+    item["images"] = [{"url_list": ["https://p1.douyinpic.com/1.jpg"]}]
+    r = _extract_result(item)
+    assert r is not None
+    assert r["type"] == "video"
+    assert r["video_url"] == "https://v.douyin.com/video.mp4"
+    assert r["images"] == []
+
+
+def test_extract_live_photo_without_video_falls_back_to_images():
+    """实况照片无视频直链时退回图集发送。"""
+    item = _video_item(aweme_type=51)
+    item["video"] = {}
+    item["images"] = [{"url_list": ["https://p1.douyinpic.com/1.jpg"]}]
+    r = _extract_result(item)
+    assert r is not None
+    assert r["type"] == "image"
+    assert r["images"] == ["https://p1.douyinpic.com/1.jpg"]
+
+
+def test_extract_regular_image_set_still_image():
+    """普通图文(aweme_type=68)即使带视频预览字段仍按图集发送。"""
+    item = _video_item(aweme_type=68)
+    item["images"] = [{"url_list": ["https://p1.douyinpic.com/1.jpg"]}]
+    r = _extract_result(item)
+    assert r is not None
+    assert r["type"] == "image"
+    assert r["images"] == ["https://p1.douyinpic.com/1.jpg"]
 
 
 def test_extract_wrong_types_do_not_crash():

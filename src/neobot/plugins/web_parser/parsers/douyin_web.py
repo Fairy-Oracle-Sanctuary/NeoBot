@@ -44,6 +44,9 @@ _TTWID_TTL = 12 * 3600
 # aweme_id 提取：/video/<id> 或 /note/<id>
 _AWEME_RE = re.compile(r"/(?:video|note)/(\d{15,20})")
 
+# 图片模板后缀（~tplv-xxx[:宽高]）：剥离后为原图直链，避免模板 URL 偶发 403
+_TPL_SUFFIX_RE = re.compile(r"~tplv-[^/]*$")
+
 
 class _State:
     """模块级可变状态：全局会话、浏览器指纹、ttwid 缓存。"""
@@ -188,12 +191,34 @@ def _extract_result(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     if not isinstance(video, dict):
         video = {}
 
-    # 图集/图文：images 数组（优先）；否则视频直链
+    # 图集/图文：images 数组（优先）；否则视频直链。
+    # 动态图文（live_photo_type=1）的每张图还带动态视频直链（img.video.play_addr），
+    # 一并提取到 image_videos（与 images 一一对应，无动态视频的图为 ""），
+    # 发送时优先按视频（动效完整），静态图作兜底。
     images = []
+    image_videos = []
     for img in item.get("images") or []:
-        url = _first_url((img or {}).get("url_list"))
-        if url:
-            images.append(url)
+        img = img or {}
+        url = _first_url(img.get("url_list"))
+        if not url:
+            continue
+        # 剥离 ~tplv-xxx 图片模板后缀：带模板参数的 URL 会偶发 403（防盗链），
+        # 原图直链最稳（2026-08 实测：同图模板 URL 403 而原图 200）
+        images.append(_TPL_SUFFIX_RE.sub("", url))
+        img_video = img.get("video") or {}
+        img_videos_url = ""
+        if isinstance(img_video, dict):
+            img_play_addr = img_video.get("play_addr")
+            if isinstance(img_play_addr, dict):
+                img_videos_url = _first_url(img_play_addr.get("url_list"))
+            if not img_videos_url:
+                for br in img_video.get("bit_rate") or []:
+                    br_play_addr = (br or {}).get("play_addr")
+                    if isinstance(br_play_addr, dict):
+                        img_videos_url = _first_url(br_play_addr.get("url_list"))
+                        if img_videos_url:
+                            break
+        image_videos.append(img_videos_url)
 
     cover = _first_url((video.get("cover") or {}).get("url_list")) or (
         images[0] if images else ""
@@ -223,16 +248,36 @@ def _extract_result(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         "music": music,
     }
 
-    if images:
-        return {"type": "image", "video_url": "", "video_url_HQ": "", "images": images, **base}
-
-    video_url = _first_url((video.get("play_addr") or {}).get("url_list"))
+    # 视频直链：play_addr 优先，缺失时从 bit_rate 兜底
+    video_url = ""
+    video_play_addr = video.get("play_addr")
+    if isinstance(video_play_addr, dict):
+        video_url = _first_url(video_play_addr.get("url_list"))
     if not video_url:
-        # 部分作品 play_addr 为空，尝试 bit_rate 里的地址
         for br in video.get("bit_rate") or []:
-            video_url = _first_url((br or {}).get("play_addr", {}).get("url_list"))
-            if video_url:
-                break
+            br_play_addr = (br or {}).get("play_addr")
+            if isinstance(br_play_addr, dict):
+                video_url = _first_url(br_play_addr.get("url_list"))
+                if video_url:
+                    break
+
+    # 实况照片（live photo，aweme_type=51）：既有动态视频又有静态图，
+    # 有视频直链时按视频发送（动态效果）；否则退回图集/图文。
+    # 兼容字符串类型：个别端点可能返回 "51" 而非 51
+    is_live_photo = str(item.get("aweme_type")) == "51"
+    if is_live_photo and video_url:
+        return {"type": "video", "video_url": video_url, "video_url_HQ": video_url, "images": [], **base}
+
+    if images:
+        return {
+            "type": "image",
+            "video_url": "",
+            "video_url_HQ": "",
+            "images": images,
+            "image_videos": image_videos,
+            **base,
+        }
+
     if not video_url:
         logger.error("[抖音逆向] detail 返回无视频直链也无图集")
         return None
