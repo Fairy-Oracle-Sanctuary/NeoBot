@@ -1,9 +1,8 @@
 import os
 import re
 import aiohttp
-import traceback
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Optional
 
 from ossapi import Ossapi, Beatmap
 
@@ -35,8 +34,9 @@ _client_last_error: Optional[str] = None
 
 def get_osu_client() -> Optional[Ossapi]:
     global _client_error_state, _client_last_error
-    client_id = os.environ.get("OSU_CLIENT_ID", "49746")
-    client_secret = os.environ.get("OSU_CLIENT_SECRET", "3sLQQC92twXgETwkJwixZWs5Chvhpo1HHQbYklLN")
+    # 凭据必须通过环境变量注入，禁止硬编码默认值（曾泄露真实 secret 到 git）
+    client_id = os.environ.get("OSU_CLIENT_ID", "")
+    client_secret = os.environ.get("OSU_CLIENT_SECRET", "")
 
     if not client_id or not client_secret:
         _client_error_state = "missing_credentials"
@@ -218,7 +218,7 @@ async def download_osu_text(bid: int) -> DownloadResult:
                 )
     except aiohttp.ClientTimeout:
         return DownloadResult(
-            error=f"下载谱面文件超时 (15s)，osu! 服务器可能响应缓慢",
+            error="下载谱面文件超时 (15s)，osu! 服务器可能响应缓慢",
             error_code="download_timeout",
         )
     except aiohttp.ClientError as e:

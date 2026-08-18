@@ -44,7 +44,7 @@ neobot 把 login_token 私聊发给用户，提示在网站输入完成登录
 ```json
 {
   "success": true,
-  "login_token": "DrUeZDvh6emyW6f2e0xhXQ",
+  "login_token": "<一次性token，私聊下发，勿明文入库>",
   "expires_in": 300
 }
 ```
