@@ -43,6 +43,9 @@
 | 代码 | 来源 | 许可证 |
 |---|---|---|
 | `douyin_abogus.py`（a_bogus 签名算法） | [JohnserfSeed/f2](https://github.com/JohnserfSeed/f2) | Apache-2.0 |
+| `xhs.py`（小红书解析器，Node 版思路移植） | [LangYa466](https://github.com/LangYa466)（狼牙） | **专有软件授权**（非开源许可，见下方说明） |
+
+> ⚠️ **小红书解析器授权说明**：`xhs.py` 移植自 LangYa466（狼牙）的 Node 版实现，该部分按**专有软件授权**分发，不属于开源许可证范畴；使用本项目时该部分仍受原作者授权条款约束，请勿将其代码另作开源分发。
 
 ### 集成的开源服务
 
