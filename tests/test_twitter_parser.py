@@ -87,3 +87,58 @@ def test_default_disabled_and_memory_toggle():
         assert await tp.is_enabled_for("user:1") is False
 
     asyncio.run(scenario())
+
+
+# ── ffmpeg 水印处理（2026-08 新增：改变文件指纹后发送） ──────────
+
+
+def test_random_meta_title_format():
+    for _ in range(20):
+        title = tp._random_meta_title()
+        word, _, num = title.rpartition(" ")
+        assert word in tp._WATERMARK_TITLE_WORDS
+        assert num.isdigit() and len(num) == 4
+
+
+def test_random_meta_time_iso():
+    import re as _re
+
+    for _ in range(20):
+        ts = tp._random_meta_time()
+        # ISO8601: 2026-08-19T07:25:12
+        assert _re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}", ts)
+
+
+def test_build_watermark_filter():
+    f = tp._build_watermark_filter("2026-08-19 18:25:00")
+    # 8 行全屏铺底 + 1 个右下角清晰时间戳
+    assert f.count("drawtext=") == 9
+    # 时间戳冒号必须转义（filter 语法中 : 是分隔符）
+    assert r"18\:25\:00" in f
+    # 右下角时间戳带黑边
+    assert "borderw=2" in f and "bordercolor=black@0.7" in f
+    # 全屏铺底是半透明
+    assert "fontcolor=white@0.15" in f
+
+
+def test_watermark_video_returns_none_when_ffmpeg_missing(monkeypatch):
+    """ffmpeg 不可用时水印处理直接返回 None（调用方回退原逻辑）。"""
+    monkeypatch.setattr(tp, "FFMPEG_AVAILABLE", False)
+
+    async def scenario():
+        assert await tp._watermark_video("https://video.twimg.com/v.mp4") is None
+
+    asyncio.run(scenario())
+
+
+def test_watermark_video_returns_none_when_server_down(monkeypatch):
+    """本地文件服务器未启动时水印处理返回 None。"""
+    monkeypatch.setattr(tp, "FFMPEG_AVAILABLE", True)
+    monkeypatch.setattr(
+        tp, "get_local_file_server", lambda: type("S", (), {"site": None})(),
+    )
+
+    async def scenario():
+        assert await tp._watermark_video("https://video.twimg.com/v.mp4") is None
+
+    asyncio.run(scenario())

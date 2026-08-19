@@ -12,7 +12,11 @@
 """
 import asyncio
 import os
+import random
 import re
+import shutil
+import subprocess
+import tempfile
 import time
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
@@ -22,7 +26,7 @@ import aiohttp
 from neobot.core.managers.command_manager import matcher
 from neobot.core.managers.redis_manager import redis_manager
 from neobot.core.permission import Permission
-from neobot.core.services.local_file_server import download_to_local
+from neobot.core.services.local_file_server import download_to_local, get_local_file_server
 from neobot.core.utils.logger import ModuleLogger
 from neobot.models.events.message import MessageEvent
 from neobot.models.message import MessageSegment
@@ -80,6 +84,132 @@ _TWIMG_HEADERS = {
     "User-Agent": _USER_AGENT,
     "Referer": "https://x.com/",
 }
+
+# ── ffmpeg 水印处理（改变文件指纹，避免内容无法发出） ─────────────
+
+# ffmpeg 可用性标志（视频水印/指纹处理需要）
+FFMPEG_AVAILABLE = False
+try:
+    subprocess.run(["ffmpeg", "-version"], capture_output=True, check=True, timeout=10)
+    FFMPEG_AVAILABLE = True
+except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+    logger.warning("[TwitterParser] ffmpeg 未安装，视频将不带水印原样发送")
+
+# 随机元数据标题词池（每次处理生成不同标题/时间，改变文件指纹）
+_WATERMARK_TITLE_WORDS = [
+    "video", "clip", "daily", "moment", "record", "share", "fun",
+    "story", "life", "happy", "vlog", "scene",
+]
+_FFMPEG_TIMEOUT = 300  # 1080p 全片重编码最坏情况
+
+
+def _random_meta_title() -> str:
+    """生成随机标题（用于改变文件指纹，无身份信息）。"""
+    return f"{random.choice(_WATERMARK_TITLE_WORDS)} {random.randint(1000, 9999)}"
+
+
+def _random_meta_time() -> str:
+    """生成随机 ISO 时间（用于改变文件指纹）。"""
+    # 过去 1 年内随机时间，格式 ISO8601（mp4 元数据常用）
+    now = time.time()
+    random_ts = now - random.uniform(0, 365 * 24 * 3600)
+    return datetime.fromtimestamp(random_ts, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def _build_watermark_filter(ts_text: str) -> str:
+    """
+    构建全屏时间戳水印滤镜链：
+    - 8 行半透明时间戳从顶到底铺满全屏（防转发内容识别）
+    - 右下角一个清晰带黑边的时间戳
+    """
+    # 时间戳里的冒号在 filter 语法里是分隔符，必须转义
+    ts_escaped = ts_text.replace(":", r"\:")
+    lines = []
+    # 全屏半透明铺底（8 行交错）
+    for frac in (0.04, 0.16, 0.28, 0.40, 0.52, 0.64, 0.76, 0.88):
+        lines.append(
+            f"drawtext=text='{ts_escaped}':fontcolor=white@0.15:"
+            f"fontsize=h/22:x=(w-tw)/2:y=h*{frac}"
+        )
+    # 右下角清晰时间戳
+    lines.append(
+        f"drawtext=text='{ts_escaped}':fontcolor=white@0.9:fontsize=h/34:"
+        f"borderw=2:bordercolor=black@0.7:x=w-text_w-30:y=h-text_h-30"
+    )
+    return ",".join(lines)
+
+
+async def _watermark_video(video_url: str) -> Optional[str]:
+    """
+    下载推文视频 → ffmpeg 打全屏时间戳水印 + 清空原始元数据 + 写入随机
+    元数据（改变文件指纹）→ 注册到本地文件服务器。
+
+    Returns:
+        处理后的本地访问 URL；ffmpeg 不可用/下载失败/处理失败时返回 None
+        （调用方回退原逻辑）。
+    """
+    if not FFMPEG_AVAILABLE:
+        return None
+    server = get_local_file_server()
+    if not server or server.site is None:
+        return None
+
+    out_path: Optional[str] = None
+    try:
+        file_id = await server.download_file(video_url, timeout=120, headers=_TWIMG_HEADERS)
+        if not file_id:
+            logger.error("[TwitterParser] 水印处理：视频下载失败")
+            return None
+        src_path = server.download_dir / file_id
+
+        out_fd, out_path = tempfile.mkstemp(suffix=".mp4", dir=server.download_dir)
+        os.close(out_fd)
+
+        ts_text = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        meta_time = _random_meta_time()
+        result = subprocess.run(
+            [
+                "ffmpeg", "-hide_banner", "-y", "-i", str(src_path),
+                "-vf", _build_watermark_filter(ts_text),
+                "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+                "-c:a", "aac", "-b:a", "128k",
+                "-movflags", "+faststart",
+                # 清空原始元数据（抹掉 Twitter-vork muxer / 原始 creation_time 痕迹）
+                "-map_metadata", "-1",
+                # 写入随机元数据（同一视频每次处理结果不同）
+                "-metadata", f"title={_random_meta_title()}",
+                "-metadata", f"creation_time={meta_time}",
+                # bitexact 进一步压掉编码器无关写入，保持输出可复现稳定
+                "-fflags", "+bitexact", "-flags:v", "+bitexact", "-flags:a", "+bitexact",
+                str(out_path),
+            ],
+            capture_output=True, text=True, timeout=_FFMPEG_TIMEOUT,
+        )
+        if result.returncode != 0:
+            logger.error(f"[TwitterParser] ffmpeg 水印处理失败: {result.stderr[-500:]}")
+            return None
+        if os.path.getsize(out_path) == 0:
+            logger.error("[TwitterParser] ffmpeg 水印输出为空文件")
+            return None
+
+        # 注册到本地文件服务器（file_id 基于原 URL + 随机元数据，每次唯一）
+        wm_key = f"tw-wm://{video_url}|{meta_time}"
+        wm_id = server._generate_file_id(wm_key)
+        dest_path = server.download_dir / wm_id
+        shutil.copy2(out_path, dest_path)
+        server.file_map[wm_id] = dest_path
+        logger.info(f"[TwitterParser] 视频水印处理完成: {dest_path.stat().st_size} bytes")
+        return f"{server.base_url}/download?id={wm_id}"
+
+    except subprocess.TimeoutExpired:
+        logger.error(f"[TwitterParser] ffmpeg 水印处理超时（>{_FFMPEG_TIMEOUT}s）")
+        return None
+    except Exception as e:
+        logger.error(f"[TwitterParser] 水印处理异常: {type(e).__name__}: {e}")
+        return None
+    finally:
+        if out_path and os.path.exists(out_path):
+            os.unlink(out_path)
 
 
 # ── 开关状态 ─────────────────────────────────────────────────────
@@ -340,10 +470,16 @@ async def _send_media(event: MessageEvent, photos: List[str], videos: List[str])
     if videos:
         video_url = videos[0]
         try:
-            local_url = await download_to_local(video_url, timeout=120, headers=_TWIMG_HEADERS)
-            if local_url:
-                logger.info(f"[TwitterParser] 视频已下载到本地: {local_url}")
-                video_url = local_url
+            # 先尝试 ffmpeg 水印处理（改变文件指纹）；失败则回退本地中转直链
+            wm_url = await _watermark_video(video_url)
+            if wm_url:
+                logger.info(f"[TwitterParser] 视频已加水印: {wm_url}")
+                video_url = wm_url
+            else:
+                local_url = await download_to_local(video_url, timeout=120, headers=_TWIMG_HEADERS)
+                if local_url:
+                    logger.info(f"[TwitterParser] 视频已下载到本地: {local_url}")
+                    video_url = local_url
         except Exception as e:
             logger.error(f"[TwitterParser] 视频下载失败: {type(e).__name__}: {e}")
         try:
@@ -462,9 +598,15 @@ async def _build_media_forward_nodes(
     if videos:
         video_url = videos[0]
         try:
-            local_url = await download_to_local(video_url, timeout=120, headers=_TWIMG_HEADERS)
-            if local_url:
-                video_url = local_url
+            # 先尝试 ffmpeg 水印处理（改变文件指纹）；失败则回退本地中转直链
+            wm_url = await _watermark_video(video_url)
+            if wm_url:
+                logger.info(f"[TwitterParser] 敏感视频已加水印: {wm_url}")
+                video_url = wm_url
+            else:
+                local_url = await download_to_local(video_url, timeout=120, headers=_TWIMG_HEADERS)
+                if local_url:
+                    video_url = local_url
         except Exception as e:
             logger.error(f"[TwitterParser] 敏感视频下载失败: {type(e).__name__}: {e}")
         try:
