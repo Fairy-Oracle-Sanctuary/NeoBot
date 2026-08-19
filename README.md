@@ -5,6 +5,57 @@
 
 **Powered by NEO Bot Framework**
 
+## 开源软件使用名单
+
+本项目基于 **AGPL-3.0** 开源（见 [LICENSE](LICENSE)）。运行过程中使用到以下开源软件与组件，在此一并致谢：
+
+### Python 依赖（requirements.txt）
+
+| 软件 | 用途 | 许可证 |
+|---|---|---|
+| aiohttp | HTTP 客户端 / 异步网络 | Apache-2.0 & MIT |
+| aiomysql | MySQL 异步驱动 | MIT |
+| discord.py | Discord 平台适配 | MIT |
+| bilibili-api-python | B 站 API 封装 | GPL-3.0-or-later |
+| cachetools | 缓存工具（TTL） | MIT |
+| curl_cffi | TLS 指纹模拟（抖音逆向通道） | MIT |
+| gmssl | 国密 SM3（抖音 a_bogus 签名） | BSD |
+| docker | Docker 容器管理 API | Apache-2.0 |
+| Jinja2 | 模板渲染（状态图等） | BSD |
+| loguru | 日志 | MIT |
+| orjson | 高性能 JSON | MPL-2.0 & (Apache-2.0 OR MIT) |
+| ossapi | osu! API 封装 | AGPL-3.0 |
+| pillow | 图片处理 | MIT-CMU |
+| playwright | 浏览器引擎（Chromium） | Apache-2.0 |
+| psutil | 系统信息 | BSD-3-Clause |
+| pydantic | 数据模型 / 配置校验 | MIT |
+| python-dotenv | 环境变量 | BSD-3-Clause |
+| redis | Redis 客户端 | MIT |
+| requests | HTTP 客户端 | Apache-2.0 |
+| watchdog | 文件系统监听 | Apache-2.0 |
+| websockets | WebSocket（OneBot v11） | BSD-3-Clause |
+| tomli | TOML 解析（Python <3.11） | MIT |
+
+> 开发/测试依赖：pytest（MIT）、pytest-asyncio（Apache-2.0）。
+
+### 复刻 / 参考的开源代码
+
+| 代码 | 来源 | 许可证 |
+|---|---|---|
+| `douyin_abogus.py`（a_bogus 签名算法） | [JohnserfSeed/f2](https://github.com/JohnserfSeed/f2) | Apache-2.0 |
+
+### 集成的开源服务
+
+| 服务 | 用途 | 许可证 |
+|---|---|---|
+| [NapCatQQ](https://github.com/NapNeko/NapCatQQ) | OneBot v11 协议实现（QQ 接入层） | 上游自定义宽松许可 |
+| [JMComic-Api](https://github.com/FfmpegZZZ/JMComic-Api) | 禁漫天堂相册转 PDF（`/jmc`） | MIT |
+| [FixTweet (fxtwitter)](https://github.com/FixTweet/FixTweet) | 推特/X 链接解析数据源 | 开源 API 服务 |
+
+> **许可证兼容说明**：本项目以 AGPL-3.0 发布。AGPL-3.0 / GPL-3.0 系依赖（ossapi、bilibili-api-python）在相同或兼容许可下使用，符合各自许可要求；其他依赖均采用宽松许可，无需额外约束。完整许可文本以各上游项目为准。
+
+---
+
 ## 项目概述
 
 **Calglau BOT** 是一个基于 NEO Bot Framework 构建的高性能 QQ 机器人。开源免费，欢迎二次开发。
