@@ -1,0 +1,14 @@
+# gitleaks 配置:在默认规则基础上,放行历史 release commit 中的已失效凭据。
+# 背景:0e0f17d (Public release) 曾含两个 secret,当前文件已修复(cbfcca3),
+# 但全量历史扫描仍会命中。以下值均已失效/未在使用:
+#   - login_token: 一次性登录 token,5 分钟有效,早已过期
+#   - OSU_CLIENT_SECRET: osu! 插件未接入主程序,生产从未配置该凭据
+# 若未来重新启用这些凭据,必须先轮换并移除对应 allowlist 条目。
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "已失效/已轮换的历史泄露(commit 0e0f17d),见上方说明"
+commits = ["0e0f17d3eabf42cae5135942a0c66a846a46ed23"]
+paths = ["neobot-integration.md", "src/neobot/plugins/osu!_plugin/service.py"]
