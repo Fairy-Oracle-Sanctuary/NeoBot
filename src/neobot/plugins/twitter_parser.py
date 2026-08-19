@@ -95,6 +95,24 @@ try:
 except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
     logger.warning("[TwitterParser] ffmpeg 未安装，视频将不带水印原样发送")
 
+# ── Intel VAAPI 硬编检测（N100 等 Intel 核显无头服务器用 h264_vaapi 加速） ──
+# 容器需挂载 /dev/dri/renderD128 并安装 intel-media-va-driver（见 Dockerfile）
+VAAPI_DEVICE = "/dev/dri/renderD128"
+VAAPI_AVAILABLE = False
+if FFMPEG_AVAILABLE and os.path.exists(VAAPI_DEVICE):
+    try:
+        encoders = subprocess.run(
+            ["ffmpeg", "-hide_banner", "-encoders"],
+            capture_output=True, text=True, timeout=10,
+        ).stdout
+        VAAPI_AVAILABLE = "h264_vaapi" in encoders
+        if VAAPI_AVAILABLE:
+            logger.info("[TwitterParser] 检测到 Intel VAAPI，视频水印将使用 h264_vaapi 硬编加速")
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+        VAAPI_AVAILABLE = False
+if not VAAPI_AVAILABLE:
+    logger.info("[TwitterParser] VAAPI 不可用，视频水印回退 libx264 软编")
+
 # 随机元数据标题词池（每次处理生成不同标题/时间，改变文件指纹）
 _WATERMARK_TITLE_WORDS = [
     "video", "clip", "daily", "moment", "record", "share", "fun",
@@ -116,11 +134,13 @@ def _random_meta_time() -> str:
     return datetime.fromtimestamp(random_ts, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
 
 
-def _build_watermark_filter(ts_text: str) -> str:
+def _build_watermark_filter(ts_text: str, for_vaapi: bool = False) -> str:
     """
     构建全屏时间戳水印滤镜链：
     - 8 行半透明时间戳从顶到底铺满全屏（防转发内容识别）
     - 右下角一个清晰带黑边的时间戳
+    - for_vaapi=True 时在末尾追加 format=nv12,hwupload（软滤镜→GPU 上载，
+      h264_vaapi 硬编必需；drawtext 本身仍是 CPU 滤镜，顺序不可颠倒）
     """
     # 时间戳里的冒号在 filter 语法里是分隔符，必须转义
     ts_escaped = ts_text.replace(":", r"\:")
@@ -136,6 +156,8 @@ def _build_watermark_filter(ts_text: str) -> str:
         f"drawtext=text='{ts_escaped}':fontcolor=white@0.9:fontsize=h/34:"
         f"borderw=2:bordercolor=black@0.7:x=w-text_w-30:y=h-text_h-30"
     )
+    if for_vaapi:
+        lines.append("format=nv12,hwupload")
     return ",".join(lines)
 
 
@@ -167,24 +189,33 @@ async def _watermark_video(video_url: str) -> Optional[str]:
 
         ts_text = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         meta_time = _random_meta_time()
-        result = subprocess.run(
-            [
-                "ffmpeg", "-hide_banner", "-y", "-i", str(src_path),
-                "-vf", _build_watermark_filter(ts_text),
-                "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
-                "-c:a", "aac", "-b:a", "128k",
-                "-movflags", "+faststart",
-                # 清空原始元数据（抹掉 Twitter-vork muxer / 原始 creation_time 痕迹）
-                "-map_metadata", "-1",
-                # 写入随机元数据（同一视频每次处理结果不同）
-                "-metadata", f"title={_random_meta_title()}",
-                "-metadata", f"creation_time={meta_time}",
-                # bitexact 进一步压掉编码器无关写入，保持输出可复现稳定
-                "-fflags", "+bitexact", "-flags:v", "+bitexact", "-flags:a", "+bitexact",
-                str(out_path),
-            ],
-            capture_output=True, text=True, timeout=_FFMPEG_TIMEOUT,
-        )
+
+        # 命令公共部分（水印滤镜 + 指纹处理 + 随机元数据）
+        cmd = [
+            "ffmpeg", "-hide_banner", "-y",
+            "-i", str(src_path),
+            "-vf", _build_watermark_filter(ts_text, for_vaapi=VAAPI_AVAILABLE),
+        ]
+        if VAAPI_AVAILABLE:
+            # Intel 核显硬编（N100 无头服务器实测 ~4x，CPU 负载低）；
+            # h264_vaapi 需要 init_hw_device + qp 控制质量
+            cmd[1:1] = ["-init_hw_device", f"vaapi=va:{VAAPI_DEVICE}"]
+            cmd += ["-c:v", "h264_vaapi", "-qp", "26"]
+        else:
+            cmd += ["-c:v", "libx264", "-preset", "veryfast", "-crf", "23"]
+        cmd += [
+            "-c:a", "aac", "-b:a", "128k",
+            "-movflags", "+faststart",
+            # 清空原始元数据（抹掉 Twitter-vork muxer / 原始 creation_time 痕迹）
+            "-map_metadata", "-1",
+            # 写入随机元数据（同一视频每次处理结果不同）
+            "-metadata", f"title={_random_meta_title()}",
+            "-metadata", f"creation_time={meta_time}",
+            # bitexact 进一步压掉编码器无关写入，保持输出可复现稳定
+            "-fflags", "+bitexact", "-flags:v", "+bitexact", "-flags:a", "+bitexact",
+            str(out_path),
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=_FFMPEG_TIMEOUT)
         if result.returncode != 0:
             logger.error(f"[TwitterParser] ffmpeg 水印处理失败: {result.stderr[-500:]}")
             return None

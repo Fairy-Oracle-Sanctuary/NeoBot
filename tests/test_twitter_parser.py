@@ -119,6 +119,17 @@ def test_build_watermark_filter():
     assert "borderw=2" in f and "bordercolor=black@0.7" in f
     # 全屏铺底是半透明
     assert "fontcolor=white@0.15" in f
+    # 默认（软编）不带 hwupload
+    assert "hwupload" not in f
+
+
+def test_build_watermark_filter_vaapi():
+    """VAAPI 模式下滤镜链末尾必须有 format=nv12,hwupload（硬编上载）。"""
+    f = tp._build_watermark_filter("2026-08-19 18:25:00", for_vaapi=True)
+    assert f.count("drawtext=") == 9
+    # drawtext 是 CPU 滤镜，必须排在 hwupload 之前（顺序不可颠倒）
+    assert f.rstrip().endswith("format=nv12,hwupload")
+    assert f.index("drawtext=") < f.index("format=nv12,hwupload")
 
 
 def test_watermark_video_returns_none_when_ffmpeg_missing(monkeypatch):

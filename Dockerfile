@@ -10,11 +10,14 @@ ENV TZ=Asia/Shanghai \
 
 # 系统依赖：
 #   - ffmpeg        B站解析器 / 希腊字母插件 视频图片处理
+#   - intel-media-va-driver  Intel 核显 VAAPI 驱动（N100 等无头服务器 h264_vaapi 硬编，
+#                            配合运行时挂载 /dev/dri/renderD128 使用；非 Intel 环境无副作用）
 #   - nodejs        osu! 插件难度估算器（ts_oma node_bridge）
 #   - fonts-noto-cjk 帮助图片、天气、osu 难度图等生成中文图片需要
 #   - tzdata        时区数据
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ffmpeg \
+        intel-media-va-driver \
         nodejs \
         fonts-noto-cjk \
         tzdata \
