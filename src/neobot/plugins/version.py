@@ -4,6 +4,7 @@
 提供 /ver 指令：
 - 读取构建时写入的版本哈希（/app/versions）
 - 查询 GitHub 仓库 main 分支的最新提交哈希、提交内容与提交人（GitHub API，5 分钟缓存）
+- 用 DeepSeek 生成提交内容的中文概述（按 commit sha 缓存，失败静默跳过）
 - 对比并提示是否已是最新
 
 /versions 和 /ver 均可使用（别名）。
@@ -18,6 +19,7 @@ from cachetools import TTLCache
 
 from neobot.core.managers.command_manager import matcher
 from neobot.core.bot import Bot
+from neobot.core.config_loader import global_config
 from neobot.core.utils.logger import logger
 from neobot.models.events.message import MessageEvent
 
@@ -36,6 +38,10 @@ _COMMIT_SHA_FILE = "/app/commit-sha"
 _GITHUB_REPO = "Fairy-Oracle-Sanctuary/NeoBot"
 _GITHUB_API = f"https://api.github.com/repos/{_GITHUB_REPO}/commits/main"
 _remote_cache = TTLCache(maxsize=1, ttl=300)
+
+# AI 概述缓存：按 commit sha 缓存，1 小时过期（避免每次 /ver 都调 DeepSeek）
+_AI_SUMMARY_CACHE = TTLCache(maxsize=32, ttl=3600)
+_AI_SUMMARY_TIMEOUT = 20  # DeepSeek 调用超时（秒）
 
 
 def _read_version_file() -> str:
@@ -98,6 +104,76 @@ def _escape_reply(text: Optional[str]) -> Optional[str]:
     return text.replace("`", "\\`").replace("\r", " ").replace("\n", " ")
 
 
+# ── DeepSeek AI 概述（2026-08：/ver 附带提交内容的中文概述） ──────────
+
+async def _get_ai_summary(sha: str, message: str, author: str = "") -> Optional[str]:
+    """
+    用 DeepSeek 生成 commit 的中文概述。
+
+    - 按 sha 缓存 1 小时（同一 commit 只调一次 API）
+    - 配置缺失/占位 key/调用失败时返回 None（静默跳过，不影响 /ver 主功能）
+
+    Returns:
+        Optional[str]: 中文概述；不可用时为 None。
+    """
+    if not sha:
+        return None
+    cached = _AI_SUMMARY_CACHE.get(sha)
+    if isinstance(cached, str):
+        return cached
+
+    try:
+        translation = global_config.cross_platform.translation
+        api_key = (translation.api_key or "").strip()
+        api_url = (translation.api_url or "").strip()
+        model = (translation.model or "").strip() or "deepseek-chat"
+        if not api_key or api_key == "your-deepseek-api-key-here" or not api_url:
+            return None
+    except Exception as e:
+        logger.debug(f"[version] 读取 DeepSeek 配置失败: {type(e).__name__}: {e}")
+        return None
+
+    try:
+        # 延迟 import（openai 为可选依赖；与 discord_cross 一致用 AsyncOpenAI）
+        from openai import AsyncOpenAI
+
+        client = AsyncOpenAI(
+            api_key=api_key,
+            base_url=api_url.replace("/chat/completions", ""),
+            timeout=_AI_SUMMARY_TIMEOUT,
+            max_retries=1,
+        )
+        prompt_parts = [f"提交信息：{message}"]
+        if author:
+            prompt_parts.append(f"提交人：{author}")
+        response = await client.chat.completions.create(
+            model=model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "你是 NeoBot QQ 机器人的版本更新播报助手。请用一句简单直白的中文"
+                        "概括这个 Git 提交更新了什么，说人话、不要套话、不要解释技术细节，"
+                        "不超过 50 字，直接输出概述内容，不要加引号或前缀。"
+                    ),
+                },
+                {"role": "user", "content": "\n".join(prompt_parts)},
+            ],
+            temperature=0.3,
+            max_tokens=200,
+        )
+        choice = (response.choices or [None])[0] if (response.choices or [None]) else None
+        content = (choice.message.content if choice is not None and choice.message else "") or ""
+        summary = content.strip()
+        if summary:
+            _AI_SUMMARY_CACHE[sha] = summary
+            return summary
+        return None
+    except Exception as e:
+        logger.warning(f"[version] DeepSeek 概述失败: {type(e).__name__}: {e}")
+        return None
+
+
 @matcher.platform_command(["qq", "discord"], "ver")
 async def handle_ver(bot: Bot, event: MessageEvent, args: list[str]):
     """处理 /ver 指令，返回本地版本哈希与 GitHub 最新提交。"""
@@ -122,6 +198,12 @@ async def handle_ver(bot: Bot, event: MessageEvent, args: list[str]):
             lines.append(f"📝 提交内容：{_escape_reply(remote['message'])}")
         if remote.get("author"):
             lines.append(f"👤 提交人：{_escape_reply(remote['author'])}")
+        # AI 概述（DeepSeek；失败/未配置时静默跳过）
+        summary = await _get_ai_summary(
+            remote["sha"], remote.get("message", ""), remote.get("author", "")
+        )
+        if summary:
+            lines.append(f"🤖 更新概述：{_escape_reply(summary)}")
     else:
         lines.append("🌐 GitHub 最新：查询失败（网络异常或限流，稍后再试）")
 
