@@ -20,6 +20,8 @@
 | cachetools | 缓存工具（TTL） | MIT |
 | curl_cffi | TLS 指纹模拟（抖音逆向通道） | MIT |
 | gmssl | 国密 SM3（抖音 a_bogus 签名） | BSD |
+| httpx | HTTP 客户端（跨平台翻译传输层） | BSD-3-Clause |
+| openai | OpenAI 兼容 SDK（跨平台翻译客户端） | Apache-2.0 |
 | docker | Docker 容器管理 API | Apache-2.0 |
 | Jinja2 | 模板渲染（状态图等） | BSD |
 | loguru | 日志 | MIT |

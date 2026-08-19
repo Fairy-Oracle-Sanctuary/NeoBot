@@ -7,6 +7,8 @@ bilibili-api-python==17.4.1
 cachetools==7.0.5
 curl_cffi==0.16.0  # 抖音逆向通道: TLS 指纹模拟(impersonate=chrome), 裸 TLS 会被风控
 gmssl==3.2.2  # 抖音 a_bogus 签名 SM3 哈希
+httpx==0.28.1  # 跨平台翻译: DeepSeek/OpenAI SDK 传输层(openai 依赖)
+openai==2.24.0  # 跨平台翻译: DeepSeek Chat 关键词提取/翻译客户端
 docker==7.1.0
 Jinja2==3.1.6
 loguru==0.7.3
