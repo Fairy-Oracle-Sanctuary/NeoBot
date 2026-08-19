@@ -107,6 +107,17 @@ class DouyinModel(BaseModel):
     qzqi_api_key: str = ""  # 远梦API（https://api.qzqi.com）DouYinVideo 接口密钥，留空则跳过该解析通道
 
 
+class JinmanModel(BaseModel):
+    """
+    对应 `config.toml` 中的 `[jinman]` 配置块。
+
+    禁漫天堂（JMComic）PDF 解析插件使用的自建 JMComic-Api 服务配置。
+    服务仓库：https://github.com/FfmpegZZZ/JMComic-Api
+    """
+    api_base: str = "http://127.0.0.1:8699"  # JMComic-Api 服务地址
+    timeout: int = 600  # PDF 生成超时（秒），首本生成需下载全部图片
+
+
 class LocalFileServerModel(BaseModel):
     """
     对应 `config.toml` 中的 `[local_file_server]` 配置块。
@@ -250,6 +261,7 @@ class ConfigModel(BaseModel):
     threading: ThreadingModel = Field(default_factory=ThreadingModel)
     bilibili: BilibiliModel = Field(default_factory=BilibiliModel)
     douyin: DouyinModel = Field(default_factory=DouyinModel)
+    jinman: JinmanModel = Field(default_factory=JinmanModel)
     local_file_server: LocalFileServerModel = Field(default_factory=LocalFileServerModel)
     discord: DiscordModel = Field(default_factory=DiscordModel)
     cross_platform: CrossPlatformModel = Field(default_factory=CrossPlatformModel)

@@ -154,7 +154,7 @@ Discord on_message → PlatformMessage(discord) → message_bus.publish_incoming
 | 插件 | 注册 | 备注 |
 |---|---|---|
 | mcc（/mcc、/ag） | `platform_command(["qq","discord"])` | QQ 群路由/私聊假人；Discord 上仅申请/查询类可用 |
-| echo、furry、thpic、weather、jrcd、bot_status、github_parser、web_parser、mirror_avatar、code_py、broadcast、twitter_parser、osu! | `platform_command(["qq","discord"])` | 双平台，行为在 QQ 不变 |
+| echo、furry、thpic、weather、jrcd、bot_status、github_parser、web_parser、mirror_avatar、code_py、broadcast、twitter_parser、jinman_parser、osu! | `platform_command(["qq","discord"])` | 双平台，行为在 QQ 不变 |
 | discord_cross（cross_config、cross_reload） | `platform_command(["qq","discord"])` | 管理命令 |
 | discord_cross（handle_qq_group_message） | `platform_message("qq")` | **仅 QQ**（Discord 入站走总线，避免环路） |
 | 自动触发类（web_parser、twitter、mirror_avatar、code_py、broadcast 的多步捕获） | `platform_message(["qq","discord"])` | 双平台状态机/捕获，入参为 CommandContext |

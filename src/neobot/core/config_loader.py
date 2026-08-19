@@ -8,7 +8,7 @@ from pathlib import Path
 
 import tomllib
 from pydantic import ValidationError
-from .config_models import ConfigModel, NapCatWSModel, BotModel, RedisModel, DockerModel, ImageManagerModel, MySQLModel, ReverseWSModel, ThreadingModel, BilibiliModel, DouyinModel, LocalFileServerModel, DiscordModel, CrossPlatformModel, LoggingModel, McCAdapterModel
+from .config_models import ConfigModel, NapCatWSModel, BotModel, RedisModel, DockerModel, ImageManagerModel, MySQLModel, ReverseWSModel, ThreadingModel, BilibiliModel, DouyinModel, JinmanModel, LocalFileServerModel, DiscordModel, CrossPlatformModel, LoggingModel, McCAdapterModel
 from .utils.logger import ModuleLogger
 from .utils.exceptions import ConfigError, ConfigNotFoundError, ConfigValidationError
 from .utils.env_loader import env_loader
@@ -107,9 +107,8 @@ class Config:
             return
             
         try:
-            import os
             import stat
-            
+
             # 获取文件状态
             file_stat = self.path.stat()
             
@@ -332,6 +331,13 @@ class Config:
         获取抖音解析配置
         """
         return self._model.douyin
+
+    @property
+    def jinman(self) -> JinmanModel:
+        """
+        获取禁漫天堂解析配置
+        """
+        return self._model.jinman
 
 
 # 实例化全局配置对象

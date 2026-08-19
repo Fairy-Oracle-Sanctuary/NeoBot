@@ -56,6 +56,12 @@ api_key = ""
 # 远梦API（https://api.qzqi.com）DouYinVideo 接口密钥，留空则跳过该解析通道（也支持环境变量 DOUYIN_QZQI_APIKEY）
 qzqi_api_key = ""
 
+[jinman]
+# 禁漫天堂（JMComic）PDF 解析：自建 JMComic-Api 服务地址（https://github.com/FfmpegZZZ/JMComic-Api）
+api_base = "http://127.0.0.1:8699"
+# PDF 生成超时（秒），首本生成需下载全部图片
+timeout = 600
+
 [local_file_server]
 enabled = false
 host = "0.0.0.0"
