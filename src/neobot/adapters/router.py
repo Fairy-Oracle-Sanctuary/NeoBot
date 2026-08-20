@@ -12,7 +12,6 @@
 4. 将插件返回的 OneBot `MessageSegment` 转换为 Discord 格式并发送。
 5. 将机器人回复的消息转发到跨平台映射的另一端
 """
-import asyncio
 import base64
 import io
 import re

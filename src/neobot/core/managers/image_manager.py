@@ -12,7 +12,6 @@ from jinja2 import Template
 from .browser_manager import browser_manager
 from ..utils.logger import logger
 from ..utils.singleton import Singleton
-from ..config_loader import global_config
 
 class ImageManager(Singleton):
     """

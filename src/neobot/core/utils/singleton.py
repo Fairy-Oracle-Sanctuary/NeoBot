@@ -1,7 +1,7 @@
 """
 通用单例模式基类
 """
-from typing import Any, Dict, Optional, Type, TypeVar, cast
+from typing import Any, Dict, Optional, Type, TypeVar
 
 T = TypeVar('T')
 

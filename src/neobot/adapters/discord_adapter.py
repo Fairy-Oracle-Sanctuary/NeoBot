@@ -10,10 +10,8 @@ import asyncio
 import json
 import os
 import io
-import requests
 import tempfile
-import subprocess
-from typing import Union, List, Optional
+from typing import Optional
 
 try:
     import discord
@@ -22,7 +20,6 @@ except ImportError:
     DISCORD_AVAILABLE = False
 
 from neobot.core.utils.logger import ModuleLogger
-from .router import DiscordToOneBotConverter
 from neobot.core.managers.redis_manager import redis_manager
 from neobot.core.config_loader import global_config
 
@@ -294,13 +291,6 @@ class DiscordAdapter(discord.Client if DISCORD_AVAILABLE else object):
             
             files = []
             if attachments:
-                proxies = None
-                if self.proxy:
-                    proxies = {
-                        "http": self.proxy,
-                        "https": self.proxy
-                    }
-                
                 for attachment in attachments:
                     if isinstance(attachment, dict):
                         attachment_url = attachment.get("url", "")
@@ -331,13 +321,6 @@ class DiscordAdapter(discord.Client if DISCORD_AVAILABLE else object):
                                     # discord.py 官方 API 目前不支持直接发送语音消息
                                     # 我们需要使用内部的 HTTP 客户端来发送
                                     try:
-                                        # 构造文件数据
-                                        file_data = {
-                                            "name": "voice-message.ogg",
-                                            "value": ogg_bytes,
-                                            "content_type": "audio/ogg"
-                                        }
-                                        
                                         # 构造 payload
                                         payload = {
                                             "flags": 8192  # IS_VOICE_MESSAGE

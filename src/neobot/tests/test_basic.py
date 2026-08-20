@@ -8,9 +8,9 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 def test_import_core():
     """测试核心模块是否可以被导入"""
     try:
-        import core
+        import core  # noqa: F401
         import neobot.core.bot
-        import neobot.core.ws
+        import neobot.core.ws  # noqa: F401
     except ImportError as e:
         pytest.fail(f"无法导入核心模块: {e}")
 

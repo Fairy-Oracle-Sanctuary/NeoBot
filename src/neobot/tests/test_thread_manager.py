@@ -8,12 +8,10 @@
 """
 import asyncio
 import time
-import threading
-from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from neobot.core.managers.thread_manager import thread_manager, ThreadManager
+from neobot.core.managers.thread_manager import ThreadManager
 
 
 class TestThreadManager:

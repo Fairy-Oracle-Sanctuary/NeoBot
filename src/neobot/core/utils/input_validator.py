@@ -6,7 +6,7 @@
 import re
 import html
 import ipaddress
-from typing import Optional, Union, List, Dict, Any
+from typing import Optional, List, Dict
 from urllib.parse import urlparse
 
 from .logger import ModuleLogger

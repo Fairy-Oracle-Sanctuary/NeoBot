@@ -4,7 +4,6 @@
 该模块负责初始化和配置 loguru 日志记录器，为整个应用程序提供统一的日志记录接口。
 """
 import sys
-import os
 from pathlib import Path
 from loguru import logger
 

@@ -5,14 +5,14 @@ WebSocket 连接池测试模块
 """
 import pytest
 import asyncio
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 
 # ws_pool 模块已被移除，旧测试文件整体跳过，待模块恢复后再启用
 WSConnection, WSConnectionPool = pytest.importorskip(
     "neobot.core.ws_pool",
     reason="ws_pool 模块已不存在，该测试文件为旧模块遗留",
 )
-from neobot.core.utils.exceptions import WebSocketError, WebSocketConnectionError
+from neobot.core.utils.exceptions import WebSocketError
 
 
 class TestWSConnection:

@@ -4,7 +4,7 @@
 定义了消息相关的事件类，包括 MessageEvent, PrivateMessageEvent, GroupMessageEvent。
 """
 from dataclasses import dataclass, field
-from typing import Any, Callable, Coroutine, List, Optional, Union, ClassVar
+from typing import Any, Callable, Coroutine, List, Optional, Union
 
 from neobot.core.permission import Permission
 from neobot.models.message import MessageSegment

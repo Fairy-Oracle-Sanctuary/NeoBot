@@ -7,16 +7,13 @@
 """
 
 import asyncio
-import os
 import tempfile
 import hashlib
 import time
 from pathlib import Path
 from typing import Optional, Dict
-from urllib.parse import urlparse
 import aiohttp
 from aiohttp import web
-import urllib.request
 
 from neobot.core.utils.logger import logger
 from neobot.core.config_loader import global_config

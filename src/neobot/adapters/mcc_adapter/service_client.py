@@ -4,7 +4,6 @@ MCC 独立服务客户端：neobot 只做指令路由，实际能力全部转发
 mcc-service（HTTP JSON API，Bearer 鉴权）。
 """
 import asyncio
-import json
 from typing import Any, Dict, List, Optional
 
 import aiohttp

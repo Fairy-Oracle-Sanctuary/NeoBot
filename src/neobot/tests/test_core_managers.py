@@ -38,7 +38,7 @@ def admin_manager(temp_data_dir, mock_redis):
         del AdminManager._instance
     
     # Patch the data file path
-    with patch("core.managers.admin_manager.AdminManager.__init__", return_value=None) as mock_init:
+    with patch("core.managers.admin_manager.AdminManager.__init__", return_value=None) as mock_init:  # noqa: F841
         manager = AdminManager()
         # Manually initialize necessary attributes since we mocked __init__
         manager.data_file = os.path.join(temp_data_dir, "admin.json")
@@ -55,7 +55,7 @@ def admin_manager(temp_data_dir, mock_redis):
     if hasattr(AdminManager, "_instance"):
         del AdminManager._instance
         
-    with patch("core.managers.admin_manager.os.path.dirname") as mock_dirname:
+    with patch("core.managers.admin_manager.os.path.dirname") as mock_dirname:  # noqa: F841
         # We want os.path.join(..., "data", "admin.json") to resolve to our temp file
         # But the path construction is hardcoded.
         # Instead, we can patch the `data_file` attribute after init if we can.

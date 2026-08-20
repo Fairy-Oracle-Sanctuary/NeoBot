@@ -26,7 +26,7 @@ def test_load_all_plugins(plugin_manager):
     with patch("pkgutil.iter_modules") as mock_iter, \
          patch("importlib.import_module") as mock_import, \
          patch("os.path.exists", return_value=True), \
-         patch("neobot.core.managers.plugin_manager.logger") as mock_logger:
+         patch("neobot.core.managers.plugin_manager.logger") as mock_logger:  # noqa: F841
         
         # Mock two plugins found
         mock_iter.return_value = [

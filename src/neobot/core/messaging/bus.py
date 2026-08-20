@@ -4,7 +4,7 @@
 适配器只做平台↔总线转换；转发/翻译/去重等业务逻辑订阅总线。
 """
 import asyncio
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from typing import Awaitable, Callable, Dict, List
 
 from neobot.core.utils.logger import ModuleLogger
 

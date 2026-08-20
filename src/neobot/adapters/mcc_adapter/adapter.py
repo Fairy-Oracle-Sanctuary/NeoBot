@@ -13,10 +13,7 @@ from neobot.core.config_loader import global_config
 from neobot.core.utils.logger import ModuleLogger
 
 from .service_client import (
-    McpAuthError,
     McpError,
-    McpTimeoutError,
-    McpToolError,
     McpUnreachableError,
     MccServiceClient,
 )

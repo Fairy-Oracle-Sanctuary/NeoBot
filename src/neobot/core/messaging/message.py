@@ -3,7 +3,7 @@
 平台无关消息模型。
 """
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 
 @dataclass
@@ -11,14 +11,14 @@ class MessageSegment:
     """平台无关消息段：text / image / video / record / file / at。"""
 
     type: str
-    text: str = ""
+    text_content: str = ""
     url: str = ""
     filename: str = ""
     extra: Dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def text(cls, text: str) -> "MessageSegment":
-        return cls(type="text", text=text)
+        return cls(type="text", text_content=text)
 
     @classmethod
     def image(cls, url: str, filename: str = "") -> "MessageSegment":
@@ -56,7 +56,7 @@ class PlatformMessage:
         parts = []
         for seg in self.segments:
             if seg.type == "text":
-                parts.append(seg.text)
+                parts.append(seg.text_content)
             elif seg.url:
                 parts.append(f"[{seg.type}: {seg.filename or seg.url}]")
         return "".join(parts)
