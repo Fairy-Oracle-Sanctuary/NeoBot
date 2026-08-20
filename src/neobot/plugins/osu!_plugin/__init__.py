@@ -1,10 +1,6 @@
 import time
 from typing import List
-
-from neobot.core.bot import Bot
-from neobot.core.managers.command_manager import matcher
-from neobot.core.managers.image_manager import image_manager
-from neobot.core.utils.logger import ModuleLogger
+from neobot.plugin_api import Bot, platform_command, image_manager, ModuleLogger, define_plugin
 from neobot.models.events.message import MessageEvent
 from neobot.models.message import MessageSegment
 
@@ -15,11 +11,11 @@ from .difficulty.diagnostics import diagnose, MapDiagnostics
 
 logger = ModuleLogger("osu_plugin")
 
-__plugin_meta__ = {
-    "name": "osu! Plugin",
-    "description": "osu! 综合工具：谱面重算难度 + 难度查询",
-    "usage": "/omm <链接/bid> | /难度 <链接/bid>",
-}
+plugin_manifest = define_plugin(
+    name="osu_plugin",
+    description="osu! 综合工具：谱面重算难度 + 难度查询",
+    usage="/omm <链接/bid> | /难度 <链接/bid>",
+)
 
 SLOW_THRESHOLD_MS = 5000
 
@@ -115,7 +111,6 @@ def _build_difficulty_text(analysis, meta: "BeatmapMeta", elapsed_ms: int) -> st
     lines = []
     e = analysis.estimator
     i = analysis.interlude
-    p = analysis.patterns
 
     lines.append(f"🎵 谱面: {meta.artist} - {meta.title} [{meta.version}]")
     lines.append(f"👤 Mapper: {meta.mapper} | ⭐ 官方SR: {meta.official_sr}")
@@ -194,7 +189,7 @@ async def _process_beatmap_query(event: MessageEvent, user_input: str, build_tex
 
 # ── Command Handlers ─────────────────────────────────────────────
 
-@matcher.platform_command(["qq", "discord"], "omm")
+@platform_command(["qq", "discord"], "omm")
 async def omm_handler(bot: Bot, event: MessageEvent, args: List[str]):
     user_input = " ".join(args).strip()
     if not user_input:
@@ -333,7 +328,7 @@ async def omm_handler(bot: Bot, event: MessageEvent, args: List[str]):
         await event.reply(text)
 
 
-@matcher.platform_command(["qq", "discord"], "难度", "sr")
+@platform_command(["qq", "discord"], "难度", "sr")
 async def difficulty_handler(bot: Bot, event: MessageEvent, args: List[str]):
     user_input = " ".join(args).strip()
     if not user_input:
@@ -344,6 +339,6 @@ async def difficulty_handler(bot: Bot, event: MessageEvent, args: List[str]):
     await _process_beatmap_query(event, user_input, _build_difficulty_text)
 
 
-@matcher.platform_command(["qq", "discord"], "难度帮助", "srhelp")
+@platform_command(["qq", "discord"], "难度帮助", "srhelp")
 async def difficulty_help_handler(bot: Bot, event: MessageEvent, args: List[str]):
     await event.reply(DIFFICULTY_HELP)

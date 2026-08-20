@@ -10,10 +10,7 @@ neobot 对接 mcc-service，仅保留只读/凭证类能力：
 假人操控（聊天/命令/传送/挂机/记忆/租赁等）全部在浏览器控制台 bot.wanfeng.cyou 完成，
 QQ 内不再提供任何假人操控指令。
 """
-from neobot.adapters.mcc_adapter.service_client import MccServiceClient
-from neobot.core.config_loader import global_config
-from neobot.core.managers.command_manager import matcher
-from neobot.core.utils.logger import ModuleLogger
+from neobot.plugin_api import MccServiceClient, global_config, platform_command, ModuleLogger, define_plugin
 from neobot.models import MessageEvent
 
 logger = ModuleLogger("MccPlugin")
@@ -27,20 +24,18 @@ async def _service_client() -> MccServiceClient:
     返回共享的 mcc-service HTTP 客户端（单例，复用连接池）。
     通过 mcc_manager.get_client() 获取，避免每次调用新建 ClientSession 导致泄漏。
     """
-    from neobot.adapters.mcc_adapter import mcc_manager
+    from neobot.plugin_api import mcc_manager
     return await mcc_manager.get_client()
 
 
-__plugin_meta__ = {
-    "name": "mcc",
-    "description": "MCC 插件层：/mcc 登录 签发密钥 + /mcc agent 与 /ag 只读查询。假人操控请移步浏览器控制台。",
-    "usage": (
-        "/mcc 登录（私聊）：签发网页登录密钥\n"
+plugin_manifest = define_plugin(
+    name="mcc",
+    description="MCC 插件层：/mcc 登录 签发密钥 + /mcc agent 与 /ag 只读查询。假人操控请移步浏览器控制台。",
+    usage="/mcc 登录（私聊）：签发网页登录密钥\n"
         "/mcc agent <查询>（群聊/私聊）：只读查询服务器状态（public 实例）\n"
         "/ag <查询>：只读查询服务器状态（与 /mcc agent 相同）\n"
-        "（假人操控请前往 https://bot.wanfeng.cyou 网页控制台）"
-    ),
-}
+        "（假人操控请前往 https://bot.wanfeng.cyou 网页控制台）",
+)
 
 
 # ── 登录签发（内部复用，注册到 /mcc 登录）──────────────────────
@@ -99,7 +94,7 @@ async def _do_login(bot, event: MessageEvent, reason: str = "") -> None:
 
 # ── /ag（只读，固定 public）──────────────────────────────────
 
-@matcher.platform_command(["qq", "discord"], "ag")
+@platform_command(["qq", "discord"], "ag")
 async def handle_ag_command(bot, event: MessageEvent, args: list):
     """/ag <查询>：只读查询，固定 public 实例。"""
     task = " ".join(args).strip()
@@ -139,7 +134,7 @@ async def handle_ag_command(bot, event: MessageEvent, args: list):
 
 
 
-@matcher.platform_command(["qq", "discord"], "mcc")
+@platform_command(["qq", "discord"], "mcc")
 async def handle_mcc_command(bot, event: MessageEvent, args: list):
     """
     /mcc 精简指令入口（2026-08-15 改造：假人操控移到浏览器控制台）：
@@ -182,7 +177,7 @@ async def handle_mcc_command(bot, event: MessageEvent, args: list):
 
     # ── 无参数 / help：简短帮助 ───────────────────────────
     if sub0_lower in ("help", "帮助", "用法", "?", "？"):
-        await event.reply(__plugin_meta__["usage"])
+        await event.reply(plugin_manifest.usage)
         return
     if not sub0:
         await event.reply(

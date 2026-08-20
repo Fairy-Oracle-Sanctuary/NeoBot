@@ -4,9 +4,7 @@
 """
 import os
 from typing import Dict, Any
-from neobot.core.utils.logger import ModuleLogger
-from neobot.core.config_loader import global_config
-
+from neobot.plugin_api import ModuleLogger, global_config
 try:
     import tomllib
 except ImportError:

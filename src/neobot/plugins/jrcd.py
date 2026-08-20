@@ -6,20 +6,13 @@
 
 import random
 from datetime import datetime
-
-from neobot.core.bot import Bot
-from neobot.core.managers.command_manager import matcher
-from neobot.core.managers.redis_manager import redis_manager
-from neobot.core.utils.executor import run_in_thread_pool
+from neobot.plugin_api import Bot, platform_command, redis_manager, run_in_thread_pool, logger, define_plugin
 from neobot.models.events.message import MessageEvent, MessageSegment
-from neobot.core.utils.logger import logger
-
-
-__plugin_meta__ = {
-    "name": "jrcd",
-    "description": "来看看你的长度吧！",
-    "usage": "/jrcd\n/bbcd [@某人]",
-}
+plugin_manifest = define_plugin(
+    name="jrcd",
+    description="来看看你的长度吧！",
+    usage="/jrcd\n/bbcd [@某人]",
+)
 
 # jrcd
 JRCDMSG_1 = [
@@ -71,7 +64,7 @@ def get_jrcd(user_id: int) -> int:
     return jrcd
 
 
-@matcher.platform_command(["qq", "discord"], "jrcd")
+@platform_command(["qq", "discord"], "jrcd")
 async def handle_jrcd(bot: Bot, event: MessageEvent, args: list[str]):
     if event.group_id == 831797331:
         return None
@@ -110,7 +103,7 @@ async def handle_jrcd(bot: Bot, event: MessageEvent, args: list[str]):
         logger.error(f"jrcd 插件增加调用次数失败: {e}")
 
 
-@matcher.platform_command(["qq", "discord"], "jrcd_stats")
+@platform_command(["qq", "discord"], "jrcd_stats")
 async def handle_jrcd_stats(bot: Bot, event: MessageEvent, args: list[str]):
     """
     处理 jrcd_stats 指令，查询 /jrcd 的总调用次数。
@@ -127,7 +120,7 @@ async def handle_jrcd_stats(bot: Bot, event: MessageEvent, args: list[str]):
     await event.reply(reply_text)
 
 
-@matcher.platform_command(["qq", "discord"], "bbcd")
+@platform_command(["qq", "discord"], "bbcd")
 async def handle_bbcd(bot: Bot, event: MessageEvent, args: list[str]):
     if event.group_id == 831797331:
         return None

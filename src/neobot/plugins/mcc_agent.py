@@ -6,10 +6,7 @@ MCC Agent 转发层：Agent 逻辑（DeepSeek 循环、工具、对话上下文�
 按 neobot-integration.md 约定：agent 只读、仅绑定 public 实例。
 """
 from typing import Optional
-
-from neobot.adapters.mcc_adapter import McpAdapter, McpError, mcc_manager
-from neobot.core.utils.logger import ModuleLogger
-
+from neobot.plugin_api import McpAdapter, McpError, mcc_manager, ModuleLogger
 logger = ModuleLogger("MccAgent")
 
 # agent 只读、仅绑定 public 实例（mcc-service 端保证只读权限）

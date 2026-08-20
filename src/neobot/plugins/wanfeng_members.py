@@ -13,11 +13,7 @@ mcc-service 的 /api/rental/status 直接 SISMEMBER 该集合返回 is_wanfeng�
 """
 import asyncio
 from typing import List
-
-from neobot.core.managers.bot_manager import bot_manager
-from neobot.core.managers.redis_manager import redis_manager
-from neobot.core.utils.logger import logger
-
+from neobot.plugin_api import bot_manager, redis_manager, logger
 # 晚风群群号（与 wanfeng_login.py 的 ALLOWED_GROUP_ID 一致）
 WANFENG_GROUP_ID = 854312725
 # 晚风标识 Redis key（Set 集合，存有标识的 QQ）

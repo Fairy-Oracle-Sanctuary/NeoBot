@@ -6,10 +6,7 @@ from urllib.parse import urlparse
 
 import aiohttp
 import orjson
-
-from neobot.core.utils.logger import logger
-from neobot.core.utils.input_validator import input_validator
-from neobot.core.services.local_file_server import download_to_local
+from neobot.plugin_api import logger, input_validator, download_to_local
 from neobot.models import MessageEvent, MessageSegment
 from ..base import BaseParser
 from ..utils import extract_original_text

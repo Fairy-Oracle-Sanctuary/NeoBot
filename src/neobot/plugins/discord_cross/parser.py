@@ -7,7 +7,7 @@ import json
 import re
 from typing import Dict, List, Any
 from neobot.models.message import MessageSegment
-from neobot.core.utils.logger import ModuleLogger
+from neobot.plugin_api import ModuleLogger
 from .config import config
 
 # 创建模块专用日志记录器
@@ -199,9 +199,9 @@ def parse_message_segments(segments: List[Any], attachments: List[dict]) -> str:
                     if isinstance(parsed, dict):
                         result.append(f"\n[JSON数据: {json_data[:100]}...]\n")
                 except Exception:
-                    result.append(f"\n[JSON数据]\n")
+                    result.append("\n[JSON数据]\n")
             elif seg_type == "xml":
-                result.append(f"\n[XML数据]\n")
+                result.append("\n[XML数据]\n")
         elif isinstance(seg, dict):
             seg_type = seg.get("type")
             seg_data = seg.get("data", {})
@@ -249,10 +249,9 @@ def get_platform_info(platform: str, identifier: Any) -> str:
             group_info = config.CROSS_PLATFORM_MAP[channel_id]
             group_name = group_info.get("name", f"群组 {group_info['qq_group_id']}")
             return f"[Discord {group_name}]"
-        return f"[Discord]"
+        return "[Discord]"
     elif platform == "qq":
-        group_id = int(identifier)
-        return f"[PAW qq]"
+        return "[PAW qq]"
     return ""
 
 async def format_discord_to_qq_content(
@@ -264,7 +263,6 @@ async def format_discord_to_qq_content(
 ) -> tuple[str, List[dict]]:
     """将 Discord 消息格式化为 QQ 消息格式"""
     logger.debug(f"[CrossPlatform] format_discord_to_qq_content: username={discord_username}, content='{content}', attachments={attachments}")
-    platform_info = get_platform_info("discord", channel_id)
     
     message_header = f"{discord_username}:"
     message_body = content.strip() if content else ""
@@ -318,7 +316,6 @@ async def format_qq_to_discord_content(
     attachments: List[dict] = None
 ) -> tuple[str, List[dict], dict]:
     """将 QQ 消息格式化为 Discord 消息格式（Embed 卡片）"""
-    platform_info = get_platform_info("qq", group_id)
     
     embed = {
         "type": "rich",
@@ -328,7 +325,7 @@ async def format_qq_to_discord_content(
             "icon_url": f"https://q1.qlogo.cn/g?b=qq&nk={qq_user_id}&s=640"
         },
         "footer": {
-            "text": f"来自 QQ"
+            "text": "来自 QQ"
         }
     }
     

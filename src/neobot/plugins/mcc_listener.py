@@ -10,10 +10,8 @@ MCC 服务器内监听：让 Agent 与游戏内玩家双向互动
 import asyncio
 import re
 import time
-from typing import Dict, Optional, Set, Tuple
-
-from neobot.adapters.mcc_adapter import McpAdapter, mcc_manager
-from neobot.core.utils.logger import ModuleLogger
+from typing import Dict, Set, Tuple
+from neobot.plugin_api import McpAdapter, mcc_manager, ModuleLogger, global_config
 from neobot.plugins.mcc_agent import run_mcc_agent
 
 logger = ModuleLogger("MccListener")
@@ -60,7 +58,6 @@ async def _ignored_bot_names() -> set:
     except Exception:
         pass
     try:
-        from neobot.core.config_loader import global_config
         names.update(global_config.mcc_adapter.listener_ignore_senders or [])
     except Exception:
         pass
@@ -176,7 +173,7 @@ async def _handle_mention(adapter: McpAdapter, sender: str, message: str):
         reply = await run_mcc_agent(message, adapter=adapter, caller={"name": sender})
     except Exception as e:
         logger.error(f"Agent 应答异常: {type(e).__name__}: {e}")
-        reply = f"抱歉，我暂时处理不了，可以稍后再试。"
+        reply = "抱歉，我暂时处理不了，可以稍后再试。"
 
     text = _clean_markdown(reply).strip()
     if not text:
@@ -260,7 +257,7 @@ async def _poll_once(adapter: McpAdapter):
                 continue
             # 去重以消息内容为准：同一玩家消息的多个转发副本（发送者名不同或为空）视为同一条
             if not adapter.listener_should_respond(dedup_key[1]):
-                logger.debug(f"60s 内已响应过同类消息，跳过")
+                logger.debug("60s 内已响应过同类消息，跳过")
                 continue
             logger.info(f"游戏内玩家 {dedup_key[0]} 提到机器人：{dedup_key[1][:80]}")
             # 用规范化后的真实发送者与消息内容（互通转发消息的原始 sender 可能为空）

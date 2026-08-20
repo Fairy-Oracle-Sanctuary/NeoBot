@@ -109,6 +109,19 @@ from neobot.plugin_api.manifest import (
     define_plugin,
     resolve_manifest,
 )
+from neobot.plugin_api.mcc import (
+    McpAdapter,
+    McpAdapterDisabledError,
+    McpAdapterManager,
+    McpAuthError,
+    McpError,
+    McpTimeoutError,
+    McpToolError,
+    McpUnreachableError,
+    MccServiceClient,
+    mcc,
+    mcc_manager,
+)
 from neobot.plugin_api.message import MessageSegment, PlatformMessage, PlatformSegment
 from neobot.plugin_api.permission import Permission
 from neobot.plugin_api.plugin import Plugin, SimplePlugin
@@ -154,6 +167,18 @@ __all__ = [
     # 基类
     "Plugin",
     "SimplePlugin",
+    # MCC 适配
+    "mcc",
+    "mcc_manager",
+    "McpAdapter",
+    "McpAdapterManager",
+    "MccServiceClient",
+    "McpAdapterDisabledError",
+    "McpError",
+    "McpAuthError",
+    "McpTimeoutError",
+    "McpToolError",
+    "McpUnreachableError",
     # 服务
     "redis_manager",
     "image_manager",

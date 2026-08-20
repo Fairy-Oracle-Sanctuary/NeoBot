@@ -8,11 +8,8 @@ MCC Agent 长期记忆
 存储使用 Redis（neobot 自带 redis_manager），key 前缀 neobot:mcc_agent:。
 """
 import json
-from typing import Any, Dict, List, Optional
-
-from neobot.core.managers.redis_manager import redis_manager
-from neobot.core.utils.logger import ModuleLogger
-
+from typing import Any, Dict, List
+from neobot.plugin_api import redis_manager, ModuleLogger
 logger = ModuleLogger("MccMemory")
 
 SERVER_MEMORY_KEY = "neobot:mcc_agent:server_memory"

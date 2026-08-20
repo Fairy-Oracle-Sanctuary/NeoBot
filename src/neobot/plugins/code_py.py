@@ -6,21 +6,15 @@ import re
 from typing import Dict
 import datetime
 import sys
-
-from neobot.core.managers.command_manager import matcher
-from neobot.core.managers.permission_manager import permission_manager
-from neobot.core.permission import Permission
+from neobot.plugin_api import platform_command, platform_message, permission_manager, Permission, logger, image_manager, input_validator, define_plugin
 from neobot.models.events.message import MessageEvent
-from neobot.core.utils.logger import logger
-from neobot.core.managers.image_manager import image_manager
-from neobot.core.utils.input_validator import input_validator
 from neobot.models.message import MessageSegment
 
-__plugin_meta__ = {
-    "name": "Python 代码执行",
-    "description": "在安全的沙箱环境中执行 Python 代码片段，支持单行、多行和图片输出。",
-    "usage": "/py <单行代码>\n/code_py <单行代码>\n/py (进入多行输入模式)",
-}
+plugin_manifest = define_plugin(
+    name="code_py",
+    description="在安全的沙箱环境中执行 Python 代码片段，支持单行、多行和图片输出。",
+    usage="/py <单行代码>\n/code_py <单行代码>\n/py (进入多行输入模式)",
+)
 
 # --- 会话状态管理 ---
 # 结构: {(user_id, group_id): asyncio.TimerHandle}
@@ -373,7 +367,7 @@ def validate_code_security(code: str) -> bool:
     return True
 
 
-@matcher.platform_command(["qq", "discord"], "py", "python", "code_py", permission=Permission.ADMIN)
+@platform_command(["qq", "discord"], "py", "python", "code_py", permission=Permission.ADMIN)
 async def code_py_main(event: MessageEvent, args: list[str]):
     """
     /py 命令的主入口。
@@ -409,7 +403,7 @@ async def code_py_main(event: MessageEvent, args: list[str]):
         )
         multi_line_sessions[session_key] = timeout_handler
 
-@matcher.platform_message(["qq", "discord"], block=False)
+@platform_message(["qq", "discord"], block=False)
 async def handle_multi_line_code(event: MessageEvent):
     """
     通用消息处理器，用于捕获多行模式下的代码输入。

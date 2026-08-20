@@ -4,12 +4,10 @@
 """
 import os
 import html
-from typing import List, Any
-from neobot.core.managers.command_manager import matcher
+from typing import List
+from neobot.plugin_api import platform_command, platform_message, Permission, ModuleLogger, message_bus, PlatformMessage, PlatformSegment, bot_manager
 from neobot.models.events.message import GroupMessageEvent, MessageEvent
 from neobot.models.message import MessageSegment
-from neobot.core.permission import Permission
-from neobot.core.utils.logger import ModuleLogger
 from .config import config
 from .parser import parse_forward_nodes
 
@@ -31,9 +29,6 @@ async def handle_discord_message(
     logger.info(f"[CrossPlatform] 收到 Discord 消息: {username}#{discriminator} in {channel_id}")
     logger.debug(f"[CrossPlatform] 消息内容: '{content}', 附件: {attachments}")
     # 阶段 2/3：发布到消息总线，由转发器订阅处理
-    from neobot.core.messaging.bus import message_bus
-    from neobot.core.messaging.message import PlatformMessage, MessageSegment as PlatformSegment
-
     segments = []
     if content:
         segments.append(PlatformSegment.text(content))
@@ -69,9 +64,6 @@ async def handle_qq_message(
         
     logger.info(f"[CrossPlatform] 收到 QQ 消息: {nickname} ({user_id}) in {group_name}({group_id})")
     # 阶段 2/3：发布到消息总线，由转发器订阅处理
-    from neobot.core.messaging.bus import message_bus
-    from neobot.core.messaging.message import PlatformMessage, MessageSegment as PlatformSegment
-
     segments = []
     if content:
         segments.append(PlatformSegment.text(content))
@@ -91,7 +83,7 @@ async def handle_qq_message(
         )
     )
 
-@matcher.platform_message("qq", priority=0, block=False)
+@platform_message("qq", priority=0, block=False)
 async def handle_qq_group_message(event: GroupMessageEvent):
     """处理 QQ 群消息，转发到 Discord"""
     try:
@@ -105,7 +97,6 @@ async def handle_qq_group_message(event: GroupMessageEvent):
 
         # 忽略机器人自己的消息，避免 DC→QQ 镜像后又被转发回 DC
         try:
-            from neobot.core.managers.bot_manager import bot_manager
             all_bots = bot_manager.get_all_bots()
             if all_bots and any(getattr(b, 'self_id', None) == event.user_id for b in all_bots):
                 logger.debug(f"[CrossPlatform:TRACE] 忽略机器人自己的消息: user_id={event.user_id}")
@@ -216,7 +207,7 @@ async def handle_qq_group_message(event: GroupMessageEvent):
         import traceback
         logger.error(f"[CrossPlatform] 异常堆栈: {traceback.format_exc()}")
 
-@matcher.platform_command(["qq", "discord"], "cross_config", "跨平台配置", permission=Permission.ADMIN)
+@platform_command(["qq", "discord"], "cross_config", "跨平台配置", permission=Permission.ADMIN)
 async def cross_config_command(event: MessageEvent):
     """查看跨平台配置"""
     if not config.ENABLE_CROSS_PLATFORM:
@@ -239,7 +230,7 @@ async def cross_config_command(event: MessageEvent):
                 
     await event.reply("\n".join(config_lines))
 
-@matcher.platform_command(["qq", "discord"], "cross_reload", "跨平台重载", permission=Permission.ADMIN)
+@platform_command(["qq", "discord"], "cross_reload", "跨平台重载", permission=Permission.ADMIN)
 async def cross_reload_command(event: MessageEvent):
     """重新加载跨平台配置"""
     await config.reload()

@@ -11,10 +11,7 @@
 存储：Redis hash  `neobot:group:settings:{group_id}`，field=功能key，value="1"/"0"。
 未设置一律视为开启（默认全开，管理员可关闭）。
 """
-from neobot.core.managers.command_manager import matcher
-from neobot.core.managers.redis_manager import redis_manager
-from neobot.core.utils.logger import logger
-
+from neobot.plugin_api import platform_command, redis_manager, logger
 # 无 __plugin_meta__：低调指令，不进 /help
 
 # 功能开关定义（可扩展）：key -> 中文名
@@ -121,7 +118,7 @@ def _parse_args(args):
     return None, "格式：/群管 开 <功能> 或 /群管 关 <功能>"
 
 
-@matcher.platform_command(["qq"], "群管", override_permission_check=True)
+@platform_command(["qq"], "群管", override_permission_check=True)
 async def handle_group_manage(bot, event, args):
     """
     处理 /群管 指令。

@@ -4,8 +4,7 @@
 """
 import json
 from typing import List
-from neobot.core.utils.logger import ModuleLogger
-from neobot.core.managers.redis_manager import redis_manager
+from neobot.plugin_api import ModuleLogger, redis_manager, bot_manager
 from .config import config
 from .translator import translate_with_deepseek, save_forward_pair
 from .parser import format_discord_to_qq_content, format_qq_to_discord_content, extract_text_only
@@ -42,13 +41,12 @@ async def send_to_qq(group_id: int, content: str, attachments: List[dict] = None
             return
 
         logger.debug(f"[CrossPlatform:TRACE] send_to_qq: group={group_id}, content='{content[:80] if content else ''}...', attachments={len(attachments or [])}")
-        from neobot.core.managers.bot_manager import bot_manager
         from neobot.models.message import MessageSegment
         
         all_bots = bot_manager.get_all_bots()
         
         if not all_bots:
-            logger.error(f"[CrossPlatform] 没有可用的 QQ 机器人实例")
+            logger.error("[CrossPlatform] 没有可用的 QQ 机器人实例")
             return
             
         logger.debug(f"[CrossPlatform:TRACE] send_to_qq: 找到 {len(all_bots)} 个 QQ 机器人实例")

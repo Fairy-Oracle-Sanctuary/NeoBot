@@ -11,12 +11,8 @@
 import asyncio
 import json
 from typing import Any
-from neobot.core.managers.command_manager import matcher
+from neobot.plugin_api import platform_command, platform_message, Permission, logger, redis_manager, bot_manager
 from neobot.models.events.message import MessageEvent
-from neobot.core.permission import Permission
-from neobot.core.utils.logger import logger
-from neobot.core.managers.redis_manager import redis_manager
-
 # --- 会话状态管理 ---
 # 结构: {user_id: asyncio.TimerHandle}
 broadcast_sessions: dict[int, asyncio.TimerHandle] = {}
@@ -169,7 +165,6 @@ async def broadcast_subscription_loop():
                         logger.info(f"[Broadcast] 收到跨机器人广播消息: 来源 {robot_id}")
 
                         # 获取所有活跃的 Bot 实例
-                        from neobot.core.managers.bot_manager import bot_manager
                         all_bots = bot_manager.get_all_bots()
 
                         if not all_bots:
@@ -195,7 +190,7 @@ async def broadcast_subscription_loop():
         logger.error(f"[Broadcast] 广播订阅循环异常: {e}")
 
 
-@matcher.platform_command(["qq", "discord"], "broadcast", "广播", permission=Permission.ADMIN)
+@platform_command(["qq", "discord"], "broadcast", "广播", permission=Permission.ADMIN)
 async def broadcast_start(event: MessageEvent):
     """
     广播指令的入口，启动一个等待用户消息的会话。
@@ -224,7 +219,7 @@ async def broadcast_start(event: MessageEvent):
     # 确保广播订阅已启动
     await start_broadcast_subscription()
 
-@matcher.platform_message(["qq", "discord"], block=False)
+@platform_message(["qq", "discord"], block=False)
 async def handle_broadcast_content(event: MessageEvent):
     """
     通用消息处理器，用于捕获广播模式下的消息输入。
@@ -255,7 +250,6 @@ async def handle_broadcast_content(event: MessageEvent):
     await broadcast_message_to_groups(event.bot, message_to_broadcast, robot_id)
     
     # 2. 获取其他所有 Bot 并进行广播（针对同一进程内的其他 Bot）
-    from neobot.core.managers.bot_manager import bot_manager
     all_bots = bot_manager.get_all_bots()
     
     for bot in all_bots:

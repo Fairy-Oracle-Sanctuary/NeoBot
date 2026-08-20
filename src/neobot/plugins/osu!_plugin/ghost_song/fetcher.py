@@ -1,10 +1,12 @@
 from dataclasses import dataclass
 
+from ..service import BeatmapMeta
+
 
 @dataclass
 class FetchedBeatmap:
     osu_text: str
-    meta: "BeatmapMeta"
+    meta: BeatmapMeta
 
 
 @dataclass

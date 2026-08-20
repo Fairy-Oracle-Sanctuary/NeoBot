@@ -11,13 +11,8 @@
   - 无 __plugin_meta__，不出现在 /help。
 """
 import asyncio
-from typing import Dict, List, Optional
-
-from neobot.adapters.mcc_adapter import mcc_manager
-from neobot.core.managers.bot_manager import bot_manager
-from neobot.core.managers.command_manager import matcher
-from neobot.core.utils.logger import logger
-
+from typing import Dict, List
+from neobot.plugin_api import mcc_manager, bot_manager, platform_command, logger
 # 管理员 QQ（唯一有审核权限的人）
 ADMIN_QQ = 2221577113
 
@@ -127,7 +122,7 @@ async def stop() -> bool:
     return True
 
 
-@matcher.platform_command(["qq"], "审核通过")
+@platform_command(["qq"], "审核通过")
 async def handle_review_approve(bot, event, args: list[str]):
     """
     /审核通过 <qq> —— 仅管理员可用，批准某 QQ 的永久租赁申请。

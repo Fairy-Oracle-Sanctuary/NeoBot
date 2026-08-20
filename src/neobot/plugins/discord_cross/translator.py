@@ -5,7 +5,7 @@
 import httpx
 import time
 from typing import Dict, List
-from neobot.core.utils.logger import ModuleLogger
+from neobot.plugin_api import ModuleLogger
 from .config import config
 
 logger = ModuleLogger("CrossPlatformTranslator")

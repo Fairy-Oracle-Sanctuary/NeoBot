@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
-
-from neobot.core.managers.command_manager import matcher
+from neobot.plugin_api import platform_command, platform_message, define_plugin
 from neobot.models import MessageEvent
 from .parsers.bili import BiliParser
 from .parsers.douyin import DouyinParser
@@ -8,11 +7,11 @@ from .parsers.github import GitHubParser
 from .parsers.xhs import XhsParser
 
 # 插件元信息
-__plugin_meta__ = {
-    "name": "web_parser",
-    "description": "自动解析各种Web链接，包括B站、抖音、小红书和GitHub仓库",
-    "usage": "（自动触发）当检测到支持的链接时，自动进行解析"
-}
+plugin_manifest = define_plugin(
+    name="web_parser",
+    description="自动解析各种Web链接，包括B站、抖音、小红书和GitHub仓库",
+    usage="（自动触发）当检测到支持的链接时，自动进行解析",
+)
 
 # 初始化解析器实例
 bili_parser = BiliParser()
@@ -21,7 +20,7 @@ github_parser = GitHubParser()
 xhs_parser = XhsParser()
 
 
-@matcher.platform_message(["qq", "discord"], block=False)
+@platform_message(["qq", "discord"], block=False)
 async def handle_web_links(event: MessageEvent):
     """
     处理消息，检测并解析各种Web链接
@@ -51,7 +50,7 @@ async def handle_web_links(event: MessageEvent):
 
 
 # 注册GitHub仓库查询命令
-@matcher.platform_command(["qq", "discord"], "查仓库", "github", "github_repo")
+@platform_command(["qq", "discord"], "查仓库", "github", "github_repo")
 async def handle_github_command(bot, event: MessageEvent):
     """
     处理命令调用：/查仓库 作者/仓库名

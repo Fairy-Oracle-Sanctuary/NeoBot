@@ -3,19 +3,15 @@ from datetime import datetime
 from typing import Any, Dict, List
 
 import aiohttp
-
-from neobot.core.managers.command_manager import matcher
-from neobot.core.managers.image_manager import image_manager
-from neobot.core.utils.logger import logger
-from neobot.core.utils.input_validator import input_validator
+from neobot.plugin_api import platform_command, image_manager, logger, input_validator, define_plugin
 from neobot.models import MessageEvent, MessageSegment
 from .resource.city_code import CITY_CODES
 # 插件元数据
-__plugin_meta__ = {
-    "name": "weather",
-    "description": "查询天气信息，支持中国天气网数据。",
-    "usage": "/天气 [城市代码] - 查询指定城市的天气信息\n例如：/天气 101190207 (南京)",
-}
+plugin_manifest = define_plugin(
+    name="weather",
+    description="查询天气信息，支持中国天气网数据。",
+    usage="/天气 [城市代码] - 查询指定城市的天气信息\n例如：/天气 101190207 (南京)",
+)
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
@@ -140,7 +136,7 @@ async def get_weather_data(city_code: str) -> Dict[str, Any]:
         return None
 
 
-@matcher.platform_command(["qq", "discord"], "天气")
+@platform_command(["qq", "discord"], "天气")
 async def handle_weather(bot, event: MessageEvent, args: List[str]):
     """
     处理天气查询指令

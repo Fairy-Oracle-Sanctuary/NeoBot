@@ -3,9 +3,7 @@ import re
 import aiohttp
 from typing import Optional, Dict, Any, List
 from cachetools import TTLCache
-
-from neobot.core.utils.logger import logger
-from neobot.core.managers.image_manager import image_manager
+from neobot.plugin_api import logger, image_manager
 from neobot.models import MessageEvent, MessageSegment
 from ..base import BaseParser
 

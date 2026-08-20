@@ -4,18 +4,17 @@ thpic 插件
 提供 /furry 指令，用于随机返回一个东方Project的图片。
 
 """
-from neobot.core.managers.command_manager import matcher
-from neobot.core.bot import Bot
+from neobot.plugin_api import platform_command, Bot, define_plugin
 from neobot.models.events.message import MessageEvent
 from neobot.models.message import MessageSegment
 
-__plugin_meta__ = {
-    "name": "furry",
-    "description": "处理 /furry 指令，发送furry出毛图片",
-    "usage": "/furry - 发送一条furry图，1-10",
-}
+plugin_manifest = define_plugin(
+    name="furry",
+    description="处理 /furry 指令，发送furry出毛图片",
+    usage="/furry - 发送一条furry图，1-10",
+)
 
-@matcher.platform_command(["qq", "discord"], "furry")
+@platform_command(["qq", "discord"], "furry")
 async def handle_echo(bot: Bot, event: MessageEvent, args: list[str]):
     """
     处理 furry 指令，发送一张随机的东方furry图片。
@@ -58,4 +57,4 @@ async def handle_echo(bot: Bot, event: MessageEvent, args: list[str]):
             except Exception as e:
                 await event.reply(f"报错了。。。{e}")
         else:
-            await event.reply(f"用法不正确。\n\n{__plugin_meta__['usage']}")
+            await event.reply(f"用法不正确。\n\n{plugin_manifest.usage}")

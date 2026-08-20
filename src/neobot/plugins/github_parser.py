@@ -2,20 +2,17 @@
 import re
 import json
 import aiohttp
-from typing import Optional, Dict, Any, Union
+from typing import Optional, Dict, Any
 from cachetools import TTLCache
-
-from neobot.core.utils.logger import logger
-from neobot.core.managers.command_manager import matcher
-from neobot.core.managers.image_manager import image_manager
+from neobot.plugin_api import logger, platform_command, image_manager, define_plugin
 from neobot.models import MessageEvent, MessageSegment
 
 # 插件元数据
-__plugin_meta__ = {
-    "name": "github_parser",
-    "description": "自动解析GitHub仓库链接，或通过命令查询仓库信息。",
-    "usage": "（自动触发）当检测到GitHub仓库链接时，自动发送仓库信息。\n（命令触发）/查仓库 作者/仓库名",
-}
+plugin_manifest = define_plugin(
+    name="github_parser",
+    description="自动解析GitHub仓库链接，或通过命令查询仓库信息。",
+    usage="（自动触发）当检测到GitHub仓库链接时，自动发送仓库信息。\n（命令触发）/查仓库 作者/仓库名",
+)
 
 # 常量定义
 GITHUB_NICKNAME = "GitHub仓库信息"
@@ -168,7 +165,7 @@ GITHUB_URL_PATTERN = re.compile(r"https?://(?:www\.)?github\.com/([\w\-]+)/([\w\
 
 
 # 注册命令处理器
-@matcher.platform_command(["qq", "discord"], "查仓库", "github", "github_repo")
+@platform_command(["qq", "discord"], "查仓库", "github", "github_repo")
 async def handle_github_command(bot, event: MessageEvent):
     """
     处理命令调用：/查仓库 作者/仓库名

@@ -18,25 +18,18 @@ import time
 from typing import Dict, Optional, Tuple
 
 import aiohttp
-
-from neobot.core.managers.command_manager import matcher
-from neobot.core.managers.redis_manager import redis_manager
-from neobot.core.permission import Permission
-from neobot.core.services.local_file_server import get_local_file_server
-from neobot.core.utils.logger import ModuleLogger
+from neobot.plugin_api import platform_command, platform_message, redis_manager, Permission, get_local_file_server, ModuleLogger, global_config, define_plugin
 from neobot.models.events.message import MessageEvent
 
 logger = ModuleLogger("JinmanParser")
 
-__plugin_meta__ = {
-    "name": "禁漫解析",
-    "description": "禁漫天堂（JMComic）相册转 PDF（需管理员开启，自建 JMComic-Api 服务）",
-    "usage": (
-        "/jmc解析 开启|关闭|状态 （管理员）\n"
+plugin_manifest = define_plugin(
+    name="jinman_parser",
+    description="禁漫天堂（JMComic）相册转 PDF（需管理员开启，自建 JMComic-Api 服务）",
+    usage="/jmc解析 开启|关闭|状态 （管理员）\n"
         "/jmc <车牌号或链接> 生成 PDF\n"
-        "开启后自动解析禁漫相册链接"
-    ),
-}
+        "开启后自动解析禁漫相册链接",
+)
 
 # 默认服务地址与超时，可通过 [jinman] 配置块覆盖
 DEFAULT_API_BASE = "http://127.0.0.1:8699"
@@ -81,8 +74,6 @@ def _get_config() -> Tuple[str, int]:
         (api_base, timeout)
     """
     try:
-        from neobot.core.config_loader import global_config
-
         cfg = global_config.jinman
         return (cfg.api_base or DEFAULT_API_BASE).rstrip("/"), cfg.timeout or DEFAULT_TIMEOUT
     except Exception as e:
@@ -387,7 +378,7 @@ async def _react_ok(event: MessageEvent):
 
 # ── 事件处理 ─────────────────────────────────────────────────────
 
-@matcher.platform_message(["qq", "discord"], priority=5, block=False)
+@platform_message(["qq", "discord"], priority=5, block=False)
 async def handle_jm_links(event: MessageEvent):
     """自动检测并解析禁漫相册链接（需管理员开启）。"""
     try:
@@ -406,7 +397,7 @@ async def handle_jm_links(event: MessageEvent):
         logger.error(f"[JinmanParser] 自动解析异常: {type(e).__name__}: {e}")
 
 
-@matcher.platform_command(["qq", "discord"], "jmc", "禁漫")
+@platform_command(["qq", "discord"], "jmc", "禁漫")
 async def handle_jmc_command(bot, event: MessageEvent, args: list):
     """手动生成 PDF：/jmc <车牌号或链接>"""
     if not await is_enabled_for(_scope_key(event)):
@@ -426,7 +417,7 @@ async def handle_jmc_command(bot, event: MessageEvent, args: list):
     await process_jm(event, album_id)
 
 
-@matcher.platform_command(["qq", "discord"], "jmc解析", "禁漫解析", permission=Permission.ADMIN)
+@platform_command(["qq", "discord"], "jmc解析", "禁漫解析", permission=Permission.ADMIN)
 async def handle_jmc_toggle(bot, event: MessageEvent, args: list):
     """管理员开关禁漫解析：/jmc解析 开启|关闭|状态"""
     sub = args[0].lower() if args else ""

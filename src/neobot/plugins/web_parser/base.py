@@ -8,8 +8,7 @@ import aiohttp
 from typing import Optional, Dict, Any, List, Union, Tuple
 
 from cachetools import TTLCache
-
-from neobot.core.utils.logger import logger
+from neobot.plugin_api import logger, define_plugin
 from neobot.models import MessageEvent
 
 
@@ -19,11 +18,11 @@ class BaseParser(metaclass=abc.ABCMeta):
     """
     
     # 插件元信息
-    __plugin_meta__ = {
-        "name": "web_parser",
-        "description": "Web链接解析插件",
-        "usage": "自动解析各种Web链接"
-    }
+    plugin_manifest = define_plugin(
+        name="web_parser",
+        description="Web链接解析插件",
+        usage="自动解析各种Web链接",
+    )
     
 
     

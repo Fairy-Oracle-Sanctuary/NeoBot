@@ -24,27 +24,20 @@ import time
 from typing import Dict, List, Optional, Tuple
 
 import aiohttp
-
-from neobot.core.managers.command_manager import matcher
-from neobot.core.managers.redis_manager import redis_manager
-from neobot.core.permission import Permission
-from neobot.core.services.local_file_server import get_local_file_server
-from neobot.core.utils.logger import ModuleLogger
+from neobot.plugin_api import platform_command, platform_message, redis_manager, Permission, get_local_file_server, ModuleLogger, global_config, define_plugin
 from neobot.models.events.message import MessageEvent
 from neobot.models.message import MessageSegment
 
 logger = ModuleLogger("EhentaiParser")
 
-__plugin_meta__ = {
-    "name": "E站解析",
-    "description": "E-Hentai / ExHentai 画廊链接解析与 PDF 生成（需管理员开启，自建 RESTful-ehentai-api 服务）",
-    "usage": (
-        "/eh解析 开启|关闭|状态 （管理员）\n"
+plugin_manifest = define_plugin(
+    name="ehentai_parser",
+    description="E-Hentai / ExHentai 画廊链接解析与 PDF 生成（需管理员开启，自建 RESTful-ehentai-api 服务）",
+    usage="/eh解析 开启|关闭|状态 （管理员）\n"
         "/eh <链接> 手动解析\n"
         "/ehpdf <链接或gid_token> 生成完整 PDF\n"
-        "开启后自动解析 e-hentai.org / exhentai.org 画廊链接"
-    ),
-}
+        "开启后自动解析 e-hentai.org / exhentai.org 画廊链接",
+)
 
 # 默认服务地址与超时，可通过 [ehentai] 配置块覆盖
 DEFAULT_API_BASE = "http://127.0.0.1:8677"
@@ -92,8 +85,6 @@ def _get_config() -> Tuple[str, int, str]:
         (api_base, timeout, cookie)
     """
     try:
-        from neobot.core.config_loader import global_config
-
         cfg = global_config.ehentai
         return (
             (cfg.api_base or DEFAULT_API_BASE).rstrip("/"),
@@ -554,7 +545,7 @@ async def _react_ok(event: MessageEvent):
 
 # ── 事件处理 ─────────────────────────────────────────────────────
 
-@matcher.platform_message(["qq", "discord"], priority=5, block=False)
+@platform_message(["qq", "discord"], priority=5, block=False)
 async def handle_eh_links(event: MessageEvent):
     """自动检测并解析 E-Hentai 画廊链接（需管理员开启）。"""
     try:
@@ -573,7 +564,7 @@ async def handle_eh_links(event: MessageEvent):
         logger.error(f"[EhentaiParser] 自动解析异常: {type(e).__name__}: {e}")
 
 
-@matcher.platform_command(["qq", "discord"], "eh", "E站", "ehentai")
+@platform_command(["qq", "discord"], "eh", "E站", "ehentai")
 async def handle_eh_command(bot, event: MessageEvent, args: list):
     """手动解析：/eh <链接或 gid_token>"""
     if not await is_enabled_for(_scope_key(event)):
@@ -595,7 +586,7 @@ async def handle_eh_command(bot, event: MessageEvent, args: list):
     await process_eh(event, comic_id)
 
 
-@matcher.platform_command(["qq", "discord"], "ehpdf", "E站pdf")
+@platform_command(["qq", "discord"], "ehpdf", "E站pdf")
 async def handle_eh_pdf_command(bot, event: MessageEvent, args: list):
     """生成完整 PDF：/ehpdf <链接或 gid_token>（参考 jmc 模式，上传到群文件）"""
     if not await is_enabled_for(_scope_key(event)):
@@ -617,7 +608,7 @@ async def handle_eh_pdf_command(bot, event: MessageEvent, args: list):
     await process_eh_pdf(event, comic_id)
 
 
-@matcher.platform_command(["qq", "discord"], "eh解析", "E站解析", permission=Permission.ADMIN)
+@platform_command(["qq", "discord"], "eh解析", "E站解析", permission=Permission.ADMIN)
 async def handle_eh_toggle(bot, event: MessageEvent, args: list):
     """管理员开关 E站解析：/eh解析 开启|关闭|状态"""
     sub = args[0].lower() if args else ""

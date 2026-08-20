@@ -4,10 +4,7 @@
 保持 map_players / map_regions / map_performance / map_markers 签名不变。
 """
 from typing import Optional
-
-from neobot.adapters.mcc_adapter.service_client import MccServiceClient
-from neobot.core.config_loader import global_config
-
+from neobot.plugin_api import MccServiceClient, global_config
 _client: Optional[MccServiceClient] = None
 
 

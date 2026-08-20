@@ -22,26 +22,19 @@ from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 
 import aiohttp
-
-from neobot.core.managers.command_manager import matcher
-from neobot.core.managers.redis_manager import redis_manager
-from neobot.core.permission import Permission
-from neobot.core.services.local_file_server import download_to_local, get_local_file_server
-from neobot.core.utils.logger import ModuleLogger
+from neobot.plugin_api import platform_command, platform_message, redis_manager, Permission, download_to_local, get_local_file_server, ModuleLogger, define_plugin
 from neobot.models.events.message import MessageEvent
 from neobot.models.message import MessageSegment
 
 logger = ModuleLogger("TwitterParser")
 
-__plugin_meta__ = {
-    "name": "推特解析",
-    "description": "解析 Twitter/X 链接（需管理员开启，数据源 fxtwitter 无需 API Key）",
-    "usage": (
-        "/推特解析 开启|关闭|状态 （管理员）\n"
+plugin_manifest = define_plugin(
+    name="twitter_parser",
+    description="解析 Twitter/X 链接（需管理员开启，数据源 fxtwitter 无需 API Key）",
+    usage="/推特解析 开启|关闭|状态 （管理员）\n"
         "/推特 <链接> 手动解析\n"
-        "开启后自动解析 twitter.com / x.com / t.co 链接"
-    ),
-}
+        "开启后自动解析 twitter.com / x.com / t.co 链接",
+)
 
 # FixTweet API，可通过环境变量覆盖（例如自建实例）
 API_BASE = os.environ.get("TWITTER_PARSER_API", "https://api.fxtwitter.com").rstrip("/")
@@ -733,7 +726,7 @@ async def _react_ok(event: MessageEvent):
 
 # ── 事件处理 ─────────────────────────────────────────────────────
 
-@matcher.platform_message(["qq", "discord"], priority=5, block=False)
+@platform_message(["qq", "discord"], priority=5, block=False)
 async def handle_twitter_links(event: MessageEvent):
     """自动检测并解析 twitter.com / x.com / t.co 链接（需管理员开启）。"""
     try:
@@ -751,7 +744,7 @@ async def handle_twitter_links(event: MessageEvent):
         logger.error(f"[TwitterParser] 自动解析异常: {type(e).__name__}: {e}")
 
 
-@matcher.platform_command(["qq", "discord"], "推特", "twitter")
+@platform_command(["qq", "discord"], "推特", "twitter")
 async def handle_twitter_command(bot, event: MessageEvent, args: list):
     """手动解析推特链接：/推特 <链接>"""
     if not await is_enabled_for(_scope_key(event)):
@@ -770,7 +763,7 @@ async def handle_twitter_command(bot, event: MessageEvent, args: list):
         await reply_with_error_cooldown(event, "未能从链接中识别推文，请发送 twitter.com 或 x.com 的推文链接。")
 
 
-@matcher.platform_command(["qq", "discord"], "推特解析", "twitter_parse", permission=Permission.ADMIN)
+@platform_command(["qq", "discord"], "推特解析", "twitter_parse", permission=Permission.ADMIN)
 async def handle_twitter_toggle(bot, event: MessageEvent, args: list):
     """管理员开关推特解析：/推特解析 开启|关闭|状态"""
     sub = args[0].lower() if args else ""

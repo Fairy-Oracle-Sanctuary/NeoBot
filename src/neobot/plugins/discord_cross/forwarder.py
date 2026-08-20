@@ -11,9 +11,7 @@ QQ↔Discord 的转发决策、映射、去重、防环全部收敛到这一处�
 import hashlib
 import time
 from typing import Dict, List, Optional, Tuple
-
-from neobot.core.utils.logger import ModuleLogger
-
+from neobot.plugin_api import ModuleLogger, message_bus
 from .config import config
 from .sender import (
     forward_discord_to_qq as _send_discord_to_qq,
@@ -180,7 +178,6 @@ async def _bus_discord_incoming(msg):
 
 
 def _register_bus_subscriptions():
-    from neobot.core.messaging.bus import message_bus
     # key 唯一标识本模块的订阅：热重载后同 key 重新注册会自动替换旧订阅，避免订阅者累积
     message_bus.on_incoming("qq", key="forwarder._bus_qq_incoming")(_bus_qq_incoming)
     message_bus.on_incoming("discord", key="forwarder._bus_discord_incoming")(_bus_discord_incoming)

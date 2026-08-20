@@ -4,8 +4,7 @@
 """
 import json
 import asyncio
-from neobot.core.utils.logger import ModuleLogger
-from neobot.core.managers.redis_manager import redis_manager
+from neobot.plugin_api import ModuleLogger, redis_manager
 from .config import config
 from .forwarder import forwarder
 

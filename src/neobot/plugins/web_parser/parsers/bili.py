@@ -5,18 +5,13 @@ import os
 import subprocess
 import tempfile
 from typing import Optional, Dict, Any, List, Union
-
-from neobot.core.utils.logger import logger
-from neobot.core.utils.input_validator import input_validator
+from neobot.plugin_api import logger, input_validator, global_config, download_to_local, get_local_file_server
 from neobot.models import MessageEvent, MessageSegment
 from ..base import BaseParser
 from ..utils import format_duration
 
 from bilibili_api import video, select_client, Credential
 from bilibili_api.exceptions import ResponseCodeException
-from neobot.core.config_loader import global_config
-from neobot.core.services.local_file_server import download_to_local
-
 try:
     import aiohttp
     AIOHTTP_AVAILABLE = True
@@ -548,7 +543,6 @@ class BiliParser(BaseParser):
             logger.info(f"[{self.name}] 音视频合并成功: {merged_file.name} ({merged_size} bytes)")
             
             # 上传合并后的文件到本地文件服务器
-            from neobot.core.services.local_file_server import get_local_file_server
             server = get_local_file_server()
             if server and server.site is not None:
                 try:

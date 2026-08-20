@@ -15,9 +15,7 @@ from typing import Any
 
 import aiohttp
 from cachetools import TTLCache
-
-from neobot.core.managers.command_manager import matcher
-from neobot.core.utils.logger import logger
+from neobot.plugin_api import platform_command, logger
 from neobot.models.message import MessageSegment
 
 # ---------- 配置 ----------
@@ -109,7 +107,7 @@ def _fmt_song(idx: int, song: dict) -> str:
 
 
 # ---------- 指令 ----------
-@matcher.platform_command(["qq"], "点歌")
+@platform_command(["qq"], "点歌")
 async def handle_diange(bot, ctx, args: list[str]):
     """处理 /点歌 指令：搜索 / 选歌 / 按 ID 发语音。"""
     query = " ".join(args).strip() if args else ""

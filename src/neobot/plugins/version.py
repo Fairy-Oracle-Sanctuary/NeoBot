@@ -16,18 +16,14 @@ from typing import Optional
 import aiohttp
 
 from cachetools import TTLCache
-
-from neobot.core.managers.command_manager import matcher
-from neobot.core.bot import Bot
-from neobot.core.config_loader import global_config
-from neobot.core.utils.logger import logger
+from neobot.plugin_api import platform_command, Bot, global_config, logger, define_plugin
 from neobot.models.events.message import MessageEvent
 
-__plugin_meta__ = {
-    "name": "version",
-    "description": "查询当前版本哈希与 GitHub 最新提交（/ver）",
-    "usage": "/ver - 查看当前版本与 GitHub 最新提交\n/versions - 同 /ver",
-}
+plugin_manifest = define_plugin(
+    name="version",
+    description="查询当前版本哈希与 GitHub 最新提交（/ver）",
+    usage="/ver - 查看当前版本与 GitHub 最新提交\n/versions - 同 /ver",
+)
 
 # 版本文件路径（Dockerfile 构建时写入）
 VERSION_FILE = "/app/versions"
@@ -174,7 +170,7 @@ async def _get_ai_summary(sha: str, message: str, author: str = "") -> Optional[
         return None
 
 
-@matcher.platform_command(["qq", "discord"], "ver")
+@platform_command(["qq", "discord"], "ver")
 async def handle_ver(bot: Bot, event: MessageEvent, args: list[str]):
     """处理 /ver 指令，返回本地版本哈希与 GitHub 最新提交。"""
     local = _read_version_file()
@@ -210,7 +206,7 @@ async def handle_ver(bot: Bot, event: MessageEvent, args: list[str]):
     await event.reply("\n".join(lines))
 
 
-@matcher.platform_command(["qq", "discord"], "versions")
+@platform_command(["qq", "discord"], "versions")
 async def handle_versions(bot: Bot, event: MessageEvent, args: list[str]):
     """/versions 别名，行为与 /ver 相同。"""
     await handle_ver(bot, event, args)

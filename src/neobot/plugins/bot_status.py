@@ -10,23 +10,15 @@ import asyncio
 import socket
 import platform
 from datetime import datetime, timedelta
-from functools import lru_cache
-from typing import Optional
-
-from neobot.core.bot import Bot
-from neobot.core.managers.command_manager import matcher
-from neobot.core.managers.image_manager import image_manager
-from neobot.core.managers.redis_manager import redis_manager
-from neobot.core.utils.executor import run_in_thread_pool
-from neobot.core.utils.logger import logger
+from neobot.plugin_api import Bot, platform_command, image_manager, redis_manager, run_in_thread_pool, logger, permission_manager, Permission, define_plugin
 from neobot.models.events.message import MessageEvent, MessageSegment
-from neobot.models.objects import Status, VersionInfo
+from neobot.models.objects import Status
 
-__plugin_meta__ = {
-    "name": "bot_status",
-    "description": "以图片形式展示机器人当前的综合运行状态",
-    "usage": "/status 或 /状态",
-}
+plugin_manifest = define_plugin(
+    name="bot_status",
+    description="以图片形式展示机器人当前的综合运行状态",
+    usage="/status 或 /状态",
+)
 
 # 记录机器人启动时间
 START_TIME = time.time()
@@ -314,7 +306,7 @@ def _get_os_info():
             "python_version": "获取失败",
         }
 
-@matcher.platform_command(["qq", "discord"], "status", "状态")
+@platform_command(["qq", "discord"], "status", "状态")
 async def handle_status(bot: Bot, event: MessageEvent, args: list[str]):
     """
     处理 status 指令，生成并回复机器人状态图片。
@@ -364,8 +356,6 @@ async def handle_status(bot: Bot, event: MessageEvent, args: list[str]):
             }
 
         # 脱敏：主机名/内网IP/公网IP 属基础设施信息，仅管理员可见
-        from neobot.core.managers.permission_manager import permission_manager
-        from neobot.core.permission import Permission
         if not await permission_manager.check_permission(event.user_id, Permission.ADMIN):
             network_info = {
                 "hostname": "已隐藏",
@@ -405,6 +395,6 @@ async def handle_status(bot: Bot, event: MessageEvent, args: list[str]):
             logger.error(f"渲染图片失败: {e}")
             await event.reply("状态图片渲染过程中发生错误。")
 
-    except Exception as e:
+    except Exception:
         logger.exception(f"生成状态图时发生意外错误, 用户: {event.user_id}")
-        await event.reply(f"获取状态信息时发生未知错误，请稍后再试或联系管理员。")
+        await event.reply("获取状态信息时发生未知错误，请稍后再试或联系管理员。")

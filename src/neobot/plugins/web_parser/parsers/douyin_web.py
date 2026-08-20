@@ -24,10 +24,7 @@ from typing import Optional, Dict, Any
 from urllib.parse import urlparse
 
 from curl_cffi.requests import AsyncSession
-
-from neobot.core.utils.logger import logger
-from neobot.core.utils.input_validator import input_validator
-
+from neobot.plugin_api import logger, input_validator
 from .douyin_abogus import ABogus, BrowserFingerprintGenerator
 
 # 固定 UA：与签名绑定的浏览器指纹必须一致

@@ -7,10 +7,7 @@
 
 仅限群 854312725 触发。该标识为未来 mcc-service 独占功能预留。
 """
-from neobot.core.managers.command_manager import matcher
-from neobot.core.managers.redis_manager import redis_manager
-from neobot.core.utils.logger import logger
-
+from neobot.plugin_api import platform_command, redis_manager, logger
 # 晚风标识 Redis key（Set 集合，存有标识的 QQ）
 WANFENG_MEMBERS_KEY = "neobot:wanfeng:members"
 
@@ -21,7 +18,7 @@ ALLOWED_GROUP_ID = 854312725
 PASSPHRASE = "我是晚风人"
 
 
-@matcher.platform_command(["qq"], "登录")
+@platform_command(["qq"], "登录")
 async def handle_wanfeng_login(bot, event, args: list[str]):
     """
     处理「/登录 我是晚风人」：验证口令 + 群限制，成功后打晚风标识。

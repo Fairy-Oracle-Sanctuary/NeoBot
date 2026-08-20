@@ -4,19 +4,17 @@ thpic 插件
 提供 /thpic 指令，用于随机返回一个东方Project的图片。
 
 """
-
-from neobot.core.bot import Bot
-from neobot.core.managers.command_manager import matcher
+from neobot.plugin_api import Bot, platform_command, define_plugin
 from neobot.models.events.message import MessageEvent, MessageSegment
 
-__plugin_meta__ = {
-    "name": "thpic",
-    "description": "来看看东方Project的图片吧！",
-    "usage": "/thpic [nums](1~10)",
-}
+plugin_manifest = define_plugin(
+    name="thpic",
+    description="来看看东方Project的图片吧！",
+    usage="/thpic [nums](1~10)",
+)
 
 
-@matcher.platform_command(["qq", "discord"], "thpic")
+@platform_command(["qq", "discord"], "thpic")
 async def handle_echo(bot: Bot, event: MessageEvent, args: list[str]):
     """
     处理 thpic 指令，发送一张随机的东方Project图片。
@@ -59,4 +57,4 @@ async def handle_echo(bot: Bot, event: MessageEvent, args: list[str]):
             except Exception as e:
                 await event.reply(f"报错了。。。{e}")
         else:
-            await event.reply(f"用法不正确。\n\n{__plugin_meta__['usage']}")
+            await event.reply(f"用法不正确。\n\n{plugin_manifest.usage}")

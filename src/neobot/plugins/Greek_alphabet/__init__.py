@@ -20,21 +20,17 @@ import tempfile
 
 import aiohttp
 from PIL import Image
-
-from neobot.core.bot import Bot
-from neobot.core.managers.command_manager import matcher
-from neobot.core.utils.input_validator import input_validator
-from neobot.core.utils.logger import ModuleLogger
+from neobot.plugin_api import Bot, platform_command, platform_message, input_validator, ModuleLogger, define_plugin
 from neobot.models.events.message import MessageEvent
 from neobot.models.message import MessageSegment
 
 logger = ModuleLogger("GreekAlphabet")
 
-__plugin_meta__ = {
-    "name": "希腊字母",
-    "description": "在图片上覆盖希腊字母并用 ffmpeg 叠加失真效果",
-    "usage": "/希腊字母 <字母> - 例如 /希腊字母 a（每次只能覆盖一个字母）",
-}
+plugin_manifest = define_plugin(
+    name="greek_alphabet",
+    description="在图片上覆盖希腊字母并用 ffmpeg 叠加失真效果",
+    usage="/希腊字母 <字母> - 例如 /希腊字母 a（每次只能覆盖一个字母）",
+)
 
 # ── 资源目录 ────────────────────────────────────────────────────────
 _PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -199,7 +195,7 @@ async def _wait_timeout(bot: Bot, event: MessageEvent, user_id):
             pass
 
 
-@matcher.platform_message(["qq", "discord"], block=False)
+@platform_message(["qq", "discord"], block=False)
 async def _handle_image(bot: Bot, event: MessageEvent):
     """
     监听用户消息：若该用户正在等待且发送了图片，则处理图片。
@@ -243,7 +239,7 @@ async def _handle_image(bot: Bot, event: MessageEvent):
         await event.reply(f"处理图片失败：{e}")
 
 
-@matcher.platform_command(["qq", "discord"], "希腊字母")
+@platform_command(["qq", "discord"], "希腊字母")
 async def _handle_command(bot: Bot, event: MessageEvent, args: list[str]):
     """
     处理 /希腊字母 指令：每次只取一个希腊字母，等待用户发送图片后覆盖。

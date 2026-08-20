@@ -9,11 +9,7 @@ import aiohttp
 import asyncio
 from typing import Optional, Dict, Any, List
 from urllib.parse import urlparse
-
-from neobot.core.utils.logger import logger
-from neobot.core.utils.input_validator import input_validator
-from neobot.core.config_loader import global_config as config
-from neobot.core.services.local_file_server import download_to_local, get_local_file_server
+from neobot.plugin_api import logger, input_validator, global_config as config, download_to_local, get_local_file_server
 from neobot.models import MessageEvent, MessageSegment
 from ..base import BaseParser
 from ..utils import extract_original_text

@@ -4,9 +4,7 @@
 提供 /镜像 指令，将@的用户头像或用户发送的图片处理成轴对称图形。
 支持普通图片和 GIF 动画。
 """
-from neobot.core.managers.command_manager import matcher
-from neobot.core.bot import Bot
-from neobot.core.utils.input_validator import input_validator
+from neobot.plugin_api import platform_command, platform_message, Bot, input_validator, define_plugin
 from neobot.models.events.message import MessageEvent
 from PIL import Image, ImageSequence
 import io
@@ -14,11 +12,11 @@ import aiohttp
 import base64
 import asyncio
 
-__plugin_meta__ = {
-    "name": "mirror_avatar",
-    "description": "将用户头像或图片处理成轴对称图形",
-    "usage": "/镜像 @人 - 将@的用户头像处理成轴对称图形\n/镜像 gif - 将@的用户头像处理成轴对称GIF动画\n/镜像 - 等待用户发送图片进行镜像处理",
-}
+plugin_manifest = define_plugin(
+    name="mirror_avatar",
+    description="将用户头像或图片处理成轴对称图形",
+    usage="/镜像 @人 - 将@的用户头像处理成轴对称图形\n/镜像 gif - 将@的用户头像处理成轴对称GIF动画\n/镜像 - 等待用户发送图片进行镜像处理",
+)
 
 # 存储等待图片的用户信息：user_id -> asyncio.Task（等待任务），收到图片/超时时取消，避免任务泄漏
 waiting_for_image = {}
@@ -195,7 +193,7 @@ async def wait_for_image(bot: Bot, event: MessageEvent):
         # 兜底清理：确保任务退出后条目不残留
         waiting_for_image.pop(user_id, None)
 
-@matcher.platform_message(["qq", "discord"], block=False)
+@platform_message(["qq", "discord"], block=False)
 async def handle_image_message(bot: Bot, event: MessageEvent):
     """
     处理用户发送的图片消息
@@ -264,7 +262,7 @@ async def handle_image_message(bot: Bot, event: MessageEvent):
     except Exception as e:
         await event.reply(f"处理图片失败: {str(e)}")
 
-@matcher.platform_command(["qq", "discord"], "镜像")
+@platform_command(["qq", "discord"], "镜像")
 async def handle_mirror(bot: Bot, event: MessageEvent, args: list[str]):
     """
     处理镜像指令，将@的用户头像或用户发送的图片处理成轴对称图形

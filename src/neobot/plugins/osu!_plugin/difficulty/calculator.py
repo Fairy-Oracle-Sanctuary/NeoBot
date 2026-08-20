@@ -4,7 +4,6 @@ from typing import Optional
 
 from ..ts_oma.node_bridge import (
     run_mixed_estimator,
-    NodeEstimatorResult,
     SimpleAnalysis,
     SimpleEstimator,
     SimpleInterlude,

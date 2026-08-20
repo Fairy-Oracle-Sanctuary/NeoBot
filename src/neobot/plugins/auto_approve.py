@@ -3,17 +3,16 @@
 
 提供自动同意好友请求和群聊邀请的功能。
 """
-from neobot.core.managers.command_manager import matcher
-from neobot.core.bot import Bot
+from neobot.plugin_api import on_request, Bot, define_plugin
 from neobot.models.events.request import FriendRequestEvent, GroupRequestEvent
 
-__plugin_meta__ = {
-    "name": "自动同意请求",
-    "description": "自动同意好友请求和群聊邀请",
-    "usage": "无需手动操作，自动处理请求事件",
-}
+plugin_manifest = define_plugin(
+    name="auto_approve",
+    description="自动同意好友请求和群聊邀请",
+    usage="无需手动操作，自动处理请求事件",
+)
 
-@matcher.on_request(request_type="friend")
+@on_request(request_type="friend")
 async def handle_friend_request(bot: Bot, event: FriendRequestEvent):
     """
     处理好友请求事件，自动同意好友申请
@@ -34,7 +33,7 @@ async def handle_friend_request(bot: Bot, event: FriendRequestEvent):
     except Exception as e:
         print(f"[自动同意] 同意好友请求失败: {e}")
 
-@matcher.on_request(request_type="group")
+@on_request(request_type="group")
 async def handle_group_request(bot: Bot, event: GroupRequestEvent):
     """
     处理群聊邀请事件，自动同意群聊邀请

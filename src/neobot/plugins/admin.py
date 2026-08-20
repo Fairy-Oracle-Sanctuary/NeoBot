@@ -1,29 +1,26 @@
-from neobot.core.managers import command_manager, permission_manager
-from neobot.core.permission import Permission
+from neobot.plugin_api import command, permission_manager, Permission, define_plugin
 from neobot.models.events.message import MessageEvent
 
 # 更新插件元信息以包含OP管理
-__plugin_meta__ = {
-    "name": "权限管理",
-    "description": "管理机器人的管理员和操作员",
-    "usage": (
-        "/admin list - 列出所有管理员和操作员\n"
+plugin_manifest = define_plugin(
+    name="admin",
+    description="管理机器人的管理员和操作员",
+    usage="/admin list - 列出所有管理员和操作员\n"
         "/admin add_admin <QQ号> - 添加管理员\n"
         "/admin remove_admin <QQ号> - 移除管理员\n"
         "/admin add_op <QQ号> - 添加操作员\n"
-        "/admin remove_op <QQ号> - 移除操作员"
-    ),
-}
+        "/admin remove_op <QQ号> - 移除操作员",
+)
 
 
-@command_manager.command("admin", permission=Permission.ADMIN)
+@command("admin", permission=Permission.ADMIN)
 async def admin_management(event: MessageEvent, args: list[str]):
     """
     处理所有权限管理相关的命令。
     """
     parts = args
     if not parts:
-        await event.reply(f"用法不正确。\n\n{__plugin_meta__['usage']}")
+        await event.reply(f"用法不正确。\n\n{plugin_manifest.usage}")
         return
 
     subcommand = parts[0].lower()
@@ -65,7 +62,7 @@ async def admin_management(event: MessageEvent, args: list[str]):
         await permission_manager.set_user_permission(target_user_id, Permission.USER)
         await event.reply(f"已成功移除操作员：{target_user_id}")
     else:
-        await event.reply(f"未知的子命令 '{subcommand}'。\n\n{__plugin_meta__['usage']}")
+        await event.reply(f"未知的子命令 '{subcommand}'。\n\n{plugin_manifest.usage}")
 
 
 async def list_permissions(event: MessageEvent):
