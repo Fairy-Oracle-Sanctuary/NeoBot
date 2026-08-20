@@ -6,23 +6,29 @@ E-Hentai / ExHentai 画廊解析插件
 - 管理员通过 `/eh解析 开启|关闭|状态` 控制解析功能的开关（状态持久化到 Redis，默认关闭）
 - 开启后 `/eh <链接>` 手动解析；群聊/私聊中发送 e-hentai.org / exhentai.org 画廊链接也会自动解析
 - 回复画廊信息：封面图 + 标题 + 页数 + 评分 + 标签
+- `/ehpdf <链接或gid_token>` 生成完整 PDF 并上传到群文件（参考 jmc 解析模式）
 
 数据源：自建 RESTful-ehentai-api 服务（https://github.com/bandcomic/RESTful-ehentai-api）
 接口：
-- GET {api_base}/comic/<gid>_<token>   画廊详情（标题/页数/评分/封面/标签）
+- GET {api_base}/comic/<gid>_<token>       画廊详情（标题/页数/评分/封面/标签）
+- GET {api_base}/photo/<id>/<chapter>      虚拟章节图片列表（每 20 张一章）
+- GET {api_base}/image/proxy?url=...       图片代理（下载原图用）
 
 注意：ExHentai 需要 Cookie 才能访问全部内容；服务端无 Cookie 时以游客身份
 访问公开 E-Hentai 内容。Cookie 可在 [ehentai] 配置块中提供（可选）。
 """
+import asyncio
+import math
 import re
 import time
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import aiohttp
 
 from neobot.core.managers.command_manager import matcher
 from neobot.core.managers.redis_manager import redis_manager
 from neobot.core.permission import Permission
+from neobot.core.services.local_file_server import get_local_file_server
 from neobot.core.utils.logger import ModuleLogger
 from neobot.models.events.message import MessageEvent
 from neobot.models.message import MessageSegment
@@ -31,10 +37,11 @@ logger = ModuleLogger("EhentaiParser")
 
 __plugin_meta__ = {
     "name": "E站解析",
-    "description": "E-Hentai / ExHentai 画廊链接解析（需管理员开启，自建 RESTful-ehentai-api 服务）",
+    "description": "E-Hentai / ExHentai 画廊链接解析与 PDF 生成（需管理员开启，自建 RESTful-ehentai-api 服务）",
     "usage": (
         "/eh解析 开启|关闭|状态 （管理员）\n"
         "/eh <链接> 手动解析\n"
+        "/ehpdf <链接或gid_token> 生成完整 PDF\n"
         "开启后自动解析 e-hentai.org / exhentai.org 画廊链接"
     ),
 }
@@ -70,6 +77,9 @@ _ERROR_COOLDOWN_SECONDS = 120.0
 
 # 共享 aiohttp 会话
 _session: Optional[aiohttp.ClientSession] = None
+
+# PDF 图片并发下载数
+_PDF_DOWNLOAD_CONCURRENCY = 8
 
 
 # ── 配置 ──────────────────────────────────────────────────────
@@ -189,6 +199,227 @@ async def fetch_comic_info(comic_id: str) -> Optional[dict]:
     except Exception as e:
         logger.error(f"[EhentaiParser] 获取画廊详情异常: {type(e).__name__}: {e}")
         return None
+
+
+async def fetch_photo_chapter(comic_id: str, chapter: int) -> Optional[List[str]]:
+    """
+    获取画廊某一虚拟章节的图片代理 URL 列表。
+
+    Args:
+        comic_id: 画廊 ID（gid_token）
+        chapter: 虚拟章节编号（从 1 开始，每 20 张一章）
+
+    Returns:
+        图片 URL 列表；失败返回 None。
+    """
+    api_base, _, cookie = _get_config()
+    url = f"{api_base}/photo/{comic_id}/{chapter}"
+    headers = {}
+    if cookie:
+        headers["Cookie"] = cookie
+    try:
+        session = await _get_session()
+        async with session.get(url, headers=headers, timeout=15) as response:
+            if response.status != 200:
+                logger.error(f"[EhentaiParser] 获取章节图片失败 HTTP {response.status}: {comic_id}/{chapter}")
+                return None
+            data = await response.json(content_type=None)
+            if not data or not data.get("images"):
+                return None
+            return [img.get("url", "") for img in data["images"] if img.get("url")]
+    except Exception as e:
+        logger.error(f"[EhentaiParser] 获取章节图片异常: {type(e).__name__}: {e}")
+        return None
+
+
+async def collect_all_image_urls(comic_id: str, info: dict) -> Optional[List[str]]:
+    """
+    遍历所有虚拟章节，收集画廊全部图片的代理 URL。
+
+    Args:
+        comic_id: 画廊 ID（gid_token）
+        info: fetch_comic_info 返回的详情
+
+    Returns:
+        全部图片 URL 列表（按章节顺序）；失败返回 None。
+    """
+    page_count = info.get("page_count") or 0
+    total_chapters = info.get("total_chapters") or max(1, math.ceil(page_count / 20))
+    if total_chapters <= 0:
+        return None
+
+    urls: List[str] = []
+    for chapter in range(1, total_chapters + 1):
+        chapter_urls = await fetch_photo_chapter(comic_id, chapter)
+        if chapter_urls:
+            urls.extend(chapter_urls)
+        else:
+            logger.warning(f"[EhentaiParser] 章节 {chapter}/{total_chapters} 获取失败，跳过")
+        # 章节间轻微间隔，避免压垮代理服务
+        await asyncio.sleep(0.2)
+
+    return urls or None
+
+
+async def _download_one_image(session: aiohttp.ClientSession, url: str, sem: asyncio.Semaphore) -> Optional[bytes]:
+    """下载单张图片（并发受限），失败返回 None。"""
+    async with sem:
+        try:
+            async with session.get(url, timeout=30) as response:
+                if response.status != 200:
+                    return None
+                return await response.read()
+        except Exception as e:
+            logger.debug(f"[EhentaiParser] 图片下载失败: {type(e).__name__}: {e}")
+            return None
+
+
+def _build_pdf(images: List[bytes]) -> Optional[bytes]:
+    """
+    用 Pillow 把图片列表合成 PDF（内存中完成）。
+
+    每张图片先转 RGB（去掉 alpha 通道），再追加到单页 PDF。
+    图片解码失败时跳过该页（不中断整个画廊）。
+    """
+    from PIL import Image
+    import io
+
+    try:
+        pages = []
+        for idx, img_bytes in enumerate(images, 1):
+            try:
+                img = Image.open(io.BytesIO(img_bytes))
+                if img.mode != "RGB":
+                    img = img.convert("RGB")
+                pages.append(img)
+            except Exception as e:
+                logger.debug(f"[EhentaiParser] 第 {idx} 张图片解码失败，跳过: {type(e).__name__}: {e}")
+                continue
+
+        if not pages:
+            return None
+
+        buf = io.BytesIO()
+        pages[0].save(buf, format="PDF", save_all=True, append_images=pages[1:])
+        return buf.getvalue()
+    except Exception as e:
+        logger.error(f"[EhentaiParser] PDF 合成失败: {type(e).__name__}: {e}")
+        return None
+
+
+def _sanitize_filename(name: str) -> str:
+    """去除 Windows/QQ 文件名的非法字符并截断。"""
+    import re as _re
+
+    name = _re.sub(r'[\\/:*?"<>|\r\n]', "", name).strip()
+    return name[:120] or "EH"
+
+
+async def generate_pdf(comic_id: str, info: dict) -> Tuple[Optional[str], Optional[str]]:
+    """
+    生成画廊 PDF 并注册到本地文件服务器。
+
+    Args:
+        comic_id: 画廊 ID（gid_token）
+        info: fetch_comic_info 返回的详情（含标题）
+
+    Returns:
+        (本地访问 URL, 文件名)；失败时返回 (None, 错误信息)
+    """
+    server = get_local_file_server()
+    if server is None or server.site is None:
+        logger.error("[EhentaiParser] 本地文件服务器未启用，无法中转 PDF")
+        return None, "本地文件服务未启用"
+
+    title = (info.get("name") or "").strip()
+    page_count = info.get("page_count") or 0
+    logger.info(f"[EhentaiParser] 开始收集图片: {comic_id} ({page_count} 页)")
+
+    urls = await collect_all_image_urls(comic_id, info)
+    if not urls:
+        return None, "未能获取画廊图片列表"
+
+    session = await _get_session()
+    sem = asyncio.Semaphore(_PDF_DOWNLOAD_CONCURRENCY)
+    tasks = [_download_one_image(session, u, sem) for u in urls]
+    results = await asyncio.gather(*tasks)
+    images = [b for b in results if b]
+
+    if not images:
+        return None, "图片下载全部失败"
+
+    logger.info(f"[EhentaiParser] 图片下载完成: {len(images)}/{len(urls)}，开始合成 PDF")
+
+    pdf_bytes = _build_pdf(images)
+    if not pdf_bytes:
+        return None, "PDF 合成失败"
+
+    file_id = server._generate_file_id(f"eh://{comic_id}")
+    dest = server.download_dir / file_id
+    with open(dest, "wb") as f:
+        f.write(pdf_bytes)
+
+    server.file_map[file_id] = dest
+    local_url = f"{server.base_url}/download?id={file_id}"
+    filename = _build_pdf_filename(comic_id, title)
+    logger.success(f"[EhentaiParser] PDF 已保存: {dest} ({dest.stat().st_size} bytes)")
+    return local_url, filename
+
+
+def _build_pdf_filename(comic_id: str, title: Optional[str]) -> str:
+    """生成上传到群文件的 PDF 文件名：[<id>] <标题>.pdf"""
+    if title:
+        return f"[{comic_id}] {_sanitize_filename(title)}.pdf"
+    return f"[{comic_id}].pdf"
+
+
+async def upload_pdf(event: MessageEvent, local_url: str, filename: str) -> bool:
+    """
+    把 PDF 上传到目标群聊/私聊文件系统。
+
+    file 传本地文件服务器的 URL（NapCat 会自行下载后上传），
+    name 为展示文件名（[<id>] <标题>.pdf）。
+    """
+    group_id = getattr(event, "group_id", None)
+    try:
+        if group_id:
+            await event.bot.call_api(
+                "upload_group_file",
+                {"group_id": group_id, "file": local_url, "name": filename},
+            )
+        else:
+            await event.bot.call_api(
+                "upload_private_file",
+                {"user_id": event.user_id, "file": local_url, "name": filename},
+            )
+        return True
+    except Exception as e:
+        logger.error(f"[EhentaiParser] 上传 PDF 失败: {type(e).__name__}: {e}")
+        return False
+
+
+async def process_eh_pdf(event: MessageEvent, comic_id: str):
+    """生成并发送画廊 PDF。"""
+    # 先给用户即时反馈（图片收集 + 合成可能耗时较长）
+    await event.reply(f"⏳ 正在生成 [{comic_id}] 的 PDF，可能需要几分钟…")
+
+    info = await fetch_comic_info(comic_id)
+    if not info:
+        await reply_with_error_cooldown(event, "未能获取画廊信息，可能是链接不存在或服务异常。")
+        return
+
+    local_url, filename = await generate_pdf(comic_id, info)
+    if not local_url or not filename:
+        error_msg = filename or "生成失败"
+        await reply_with_error_cooldown(event, f"E站 PDF 生成失败：{error_msg}")
+        return
+
+    ok = await upload_pdf(event, local_url, filename)
+    if ok:
+        title_part = f"《{(info.get('name') or '').strip()}》" if (info.get('name') or '').strip() else ""
+        await event.reply(f"✅ [{comic_id}] {title_part} PDF 已发送到本群文件。")
+    else:
+        await reply_with_error_cooldown(event, "PDF 生成成功但上传失败，请稍后再试。")
 
 
 # ── 链接提取 ─────────────────────────────────────────────────
@@ -362,6 +593,28 @@ async def handle_eh_command(bot, event: MessageEvent, args: list):
         return
 
     await process_eh(event, comic_id)
+
+
+@matcher.platform_command(["qq", "discord"], "ehpdf", "E站pdf")
+async def handle_eh_pdf_command(bot, event: MessageEvent, args: list):
+    """生成完整 PDF：/ehpdf <链接或 gid_token>（参考 jmc 模式，上传到群文件）"""
+    if not await is_enabled_for(_scope_key(event)):
+        await reply_with_error_cooldown(event, "E站解析未开启，请联系管理员使用 /eh解析 开启。")
+        return
+
+    text = " ".join(args).strip()
+    if not text:
+        await reply_with_error_cooldown(event, "用法：/ehpdf <E-Hentai画廊链接或 gid_token>")
+        return
+
+    comic_id = extract_comic_id(text)
+    if not comic_id:
+        await reply_with_error_cooldown(
+            event, "未能识别画廊链接，请发送 e-hentai.org / exhentai.org 的 /g/ 链接。"
+        )
+        return
+
+    await process_eh_pdf(event, comic_id)
 
 
 @matcher.platform_command(["qq", "discord"], "eh解析", "E站解析", permission=Permission.ADMIN)
