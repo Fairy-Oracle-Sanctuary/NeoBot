@@ -8,7 +8,7 @@ from pathlib import Path
 
 import tomllib
 from pydantic import ValidationError
-from .config_models import ConfigModel, NapCatWSModel, BotModel, RedisModel, DockerModel, ImageManagerModel, MySQLModel, ReverseWSModel, ThreadingModel, BilibiliModel, DouyinModel, JinmanModel, LocalFileServerModel, DiscordModel, CrossPlatformModel, LoggingModel, McCAdapterModel
+from .config_models import ConfigModel, NapCatWSModel, BotModel, RedisModel, DockerModel, ImageManagerModel, MySQLModel, ReverseWSModel, ThreadingModel, BilibiliModel, DouyinModel, JinmanModel, EhentaiModel, LocalFileServerModel, DiscordModel, CrossPlatformModel, LoggingModel, McCAdapterModel
 from .utils.logger import ModuleLogger
 from .utils.exceptions import ConfigError, ConfigNotFoundError, ConfigValidationError
 from .utils.env_loader import env_loader
@@ -338,6 +338,13 @@ class Config:
         获取禁漫天堂解析配置
         """
         return self._model.jinman
+
+    @property
+    def ehentai(self) -> EhentaiModel:
+        """
+        获取 E-Hentai 解析配置
+        """
+        return self._model.ehentai
 
 
 # 实例化全局配置对象

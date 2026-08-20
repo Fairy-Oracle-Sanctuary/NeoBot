@@ -118,6 +118,18 @@ class JinmanModel(BaseModel):
     timeout: int = 600  # PDF 生成超时（秒），首本生成需下载全部图片
 
 
+class EhentaiModel(BaseModel):
+    """
+    对应 `config.toml` 中的 `[ehentai]` 配置块。
+
+    E-Hentai / ExHentai 画廊解析插件使用的自建 RESTful-ehentai-api 服务配置。
+    服务仓库：https://github.com/bandcomic/RESTful-ehentai-api
+    """
+    api_base: str = "http://127.0.0.1:8677"  # RESTful-ehentai-api 服务地址
+    timeout: int = 30  # 画廊详情请求超时（秒）
+    cookie: str = ""  # 可选：E-Hentai/ExHentai Cookie（访问 ExHentai 全部内容需要）
+
+
 class LocalFileServerModel(BaseModel):
     """
     对应 `config.toml` 中的 `[local_file_server]` 配置块。
@@ -262,6 +274,7 @@ class ConfigModel(BaseModel):
     bilibili: BilibiliModel = Field(default_factory=BilibiliModel)
     douyin: DouyinModel = Field(default_factory=DouyinModel)
     jinman: JinmanModel = Field(default_factory=JinmanModel)
+    ehentai: EhentaiModel = Field(default_factory=EhentaiModel)
     local_file_server: LocalFileServerModel = Field(default_factory=LocalFileServerModel)
     discord: DiscordModel = Field(default_factory=DiscordModel)
     cross_platform: CrossPlatformModel = Field(default_factory=CrossPlatformModel)

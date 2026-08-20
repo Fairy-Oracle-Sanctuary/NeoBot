@@ -62,6 +62,14 @@ api_base = "http://127.0.0.1:8699"
 # PDF 生成超时（秒），首本生成需下载全部图片
 timeout = 600
 
+[ehentai]
+# E-Hentai / ExHentai 画廊解析：自建 RESTful-ehentai-api 服务地址（https://github.com/bandcomic/RESTful-ehentai-api）
+api_base = "http://127.0.0.1:8677"
+# 画廊详情请求超时（秒）
+timeout = 30
+# 可选：E-Hentai/ExHentai Cookie（访问 ExHentai 全部内容需要，留空则以游客身份访问公开 E-Hentai）
+cookie = ""
+
 [local_file_server]
 enabled = false
 host = "0.0.0.0"
