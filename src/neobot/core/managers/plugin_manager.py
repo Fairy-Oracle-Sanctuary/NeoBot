@@ -9,7 +9,7 @@ import importlib
 import os
 import pkgutil
 import sys
-from typing import Dict, List, Set, Tuple
+from typing import List, Set, Tuple
 
 from .command_manager import CommandManager
 

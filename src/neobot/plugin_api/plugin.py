@@ -14,8 +14,6 @@
 """
 from __future__ import annotations
 
-from typing import Optional
-
 from neobot.core.plugin import Plugin, SimplePlugin, command, on_message, on_notice, on_request
 from neobot.core.permission import Permission
 

@@ -46,7 +46,6 @@ def test_all_exports_resolvable():
 def test_contract_identity_with_core():
     """契约导出与 core/models 中的对象是同一身份(薄转发,非拷贝)。"""
     from neobot.core.bot import Bot
-    from neobot.core.managers.command_manager import matcher
     from neobot.core.permission import Permission
     from neobot.models.events.message import MessageEvent
     from neobot.models.message import MessageSegment

@@ -11,7 +11,6 @@ from neobot.plugin_api import (
     Bot,
     MessageEvent,
     ModuleLogger,
-    command,
     define_plugin,
     platform_command,
 )
