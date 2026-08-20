@@ -12,7 +12,7 @@
 
 **目标**：插件与框架核心彻底解耦，让"写插件"和"改框架"互不干扰。
 
-### 1.1 插件 API 契约化 [进行中]
+### 1.1 插件 API 契约化 [已完成]
 
 - ✅ 已建立 `neobot.plugin_api` 契约命名空间(plugin-api-v1):注册装饰器 / 事件模型 / Bot / 权限 / 服务 / 清单统一从该命名空间导入,契约版本见 `plugin_api.API_VERSION`
 - ✅ 清单标准化:`define_plugin()` 声明插件名 / 描述 / 用法 / 版本 / 作者 / 契约版本,替代旧 `__plugin_meta__` 字典(旧字典仍兼容)
@@ -47,34 +47,29 @@
 
 **目标**：像 pip / npm 一样管理插件，一条命令完成安装、更新、卸载。
 
-### 2.1 插件包格式规范 [规划中]
+### 2.1 插件包格式规范 [已完成]
 
-- 定义 `.nbpkg`（NEO Bot Plugin Package）打包格式：插件代码 + manifest + 资源文件的压缩包
-- manifest 声明：插件名、版本、最低框架版本、插件 API 版本、依赖列表、入口文件、权限需求
-- 提供打包命令：`neobot plugin pack <目录>` 生成标准包
+- ✅ 插件以独立目录 + `manifest.json` 组织（插件名 / 描述 / 用法 / 版本 / 作者 / 契约版本 / 许可 / 依赖 / 入口 / 文件清单）
+- ✅ 索引文件（`index.json`）为 `{path: sha256}` 映射,支持完整性校验
+- ✅ 新插件模板: `NeoBot-Plugins/template/plugin_name/` 复制即用
 
-### 2.2 插件仓库 (Registry) [规划中]
+### 2.2 插件仓库 (Registry) [已完成]
 
-- 搭建官方插件索引仓库（GitHub 仓库或独立 Registry 服务），收录已审核插件
-- 插件发布流程：作者提交 -> 自动检查（manifest 校验 / API 兼容性 / 基础安全扫描）-> 上架
-- 支持私有源：自建索引或指向本地目录，满足内部插件分发
+- ✅ 官方插件索引仓库: [Fairy-Oracle-Sanctuary/NeoBot-Plugins](https://github.com/Fairy-Oracle-Sanctuary/NeoBot-Plugins)
+- ✅ 插件发布流程: 作者提交 -> CI 自动检查（manifest 校验 / 契约边界 AST 扫描 / ruff / pytest）-> 通过后自动收录进 `index.json`
+- ⏳ 私有源: 安装器 CLI 已支持 `--registry` 自定义索引 URL,私有源部署留作后续
 
-### 2.3 安装器 CLI [规划中]
+### 2.3 安装器 CLI [已完成]
 
-- 命令设计（挂载在现有 `cli.py` / 新增 `neobot` 子命令）：
-  - `neobot plugin install <name|url>` 安装插件
-  - `neobot plugin uninstall <name>` 卸载插件
-  - `neobot plugin update [name]` 更新插件（检查依赖冲突）
-  - `neobot plugin list` 列出已安装 / 可更新插件
-  - `neobot plugin search <keyword>` 搜索插件
-  - `neobot plugin info <name>` 查看插件详情
-- 依赖解析：安装时自动拉取依赖插件，冲突时给出明确提示，支持 `--force` 覆盖
+- ✅ 独立 CLI 工具: [neobot-plugins-cli](https://github.com/Fairy-Oracle-Sanctuary/neobot-plugins-cli)（已发布 PyPI,`pip install neobot-plugins-cli`）
+- ✅ 命令: `neobot-plugin install|uninstall|update|list|search|info`
+- ✅ 依赖声明在 manifest 中,安装时提示缺失依赖;`--yes` 跳过确认
 
-### 2.4 安全与校验 [规划中]
+### 2.4 安全与校验 [已完成]
 
-- 安装时校验插件包哈希与签名，防止篡改（与框架现有的凭据安全基线一致）
-- 插件安装前展示权限清单（用到的能力、访问的资源），由管理员确认
-- 高危操作（写文件、执行命令、外发网络请求）在 manifest 中显式声明，安装时醒目提示
+- ✅ 安装时逐文件校验 SHA256 与索引一致,防篡改
+- ✅ 安装前展示插件元信息（描述 / 作者 / 许可 / 依赖 / 文件数）并交互确认
+- ⏳ 权限清单声明（manifest 声明文件写 / 网络 / 命令执行能力并醒目提示）留作后续增强
 
 ---
 
@@ -137,9 +132,9 @@
 
 | 项目 | 状态 | 优先级 | 依赖 |
 |---|---|---|---|
-| 插件 API 契约化 | 规划中 | 高 | 无，可立即启动 |
-| 插件独立打包 / manifest | 规划中 | 高 | 契约化先行 |
-| 包管理器 CLI + Registry | 规划中 | 高 | manifest 规范 |
+| 插件 API 契约化 | 已完成 | 高 | 无，可立即启动 |
+| 插件独立打包 / manifest | 已完成 | 高 | 契约化先行 |
+| 包管理器 CLI + Registry | 已完成 | 高 | manifest 规范 |
 | 热插拔与回滚 | 构想中 | 中 | 独立打包 |
 | 插件隔离沙箱 | 构想中 | 低 | 热插拔稳定后 |
 | 测试 / CI 补强 | 规划中 | 中 | 无 |
