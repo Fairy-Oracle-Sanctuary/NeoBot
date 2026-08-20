@@ -155,10 +155,9 @@
 │       │   └── osu!_plugin/        # osu! 谱面难度评估
 │       ├── tests/          # 单元测试
 │       ├── templates/      # Jinja2模板（用于图片生成）
-│       ├── docs/           # 开发文档
 │       ├── web_static/     # 静态网页文件
 │       └── data/           # 数据存储
-├── docs/                   # 部署 / 安全 / 性能 / 适配器架构文档
+├── docs/                   # 文档总览（快速开始/核心概念/API/插件开发/部署/安全）
 ├── scripts/                # 辅助脚本 (compile_machine_code.py / export_requirements.py ...)
 ├── main.py                 # 启动入口
 ├── cli.py                  # CLI 适配器入口
@@ -180,9 +179,10 @@
 - **plugins/**: 插件目录，所有业务逻辑都在这里
 - **tests/**: 单元测试和集成测试
 - **templates/**: Jinja2 模板文件，用于图片生成
-- **docs/**: 项目文档
 - **web_static/**: 静态网页文件
 - **data/**: 数据存储目录（权限 JSON 等）
+
+文档统一在根目录 `docs/`（[入口](docs/index.md)）：快速开始、核心概念、API 参考、插件开发、部署、安全。
 
 ## 快速开始
 
@@ -195,7 +195,7 @@ docker compose up -d --build
 docker compose logs -f
 ```
 
-详见 [src/neobot/docs/deployment.md](src/neobot/docs/deployment.md) 的 Docker 部署章节。
+详见 [docs/deployment.md](docs/deployment.md) 的 Docker 部署章节。
 
 ### 方式二：本地运行
 
@@ -208,13 +208,13 @@ docker compose logs -f
 > Python 3.14 下可开启 JIT 编译加速：`python -X jit main.py`；
 > 可选 AOT 编译核心模块：`python scripts/compile_machine_code.py`（产物平台相关，仅在目标环境编译）。
 
-详细文档去 `src/neobot/docs/` 目录看
+详细文档去 `docs/` 目录看
 
 ## 开发规范
 
 - 所有代码放在 `src/neobot/` 目录下
-- 插件开发参考 `src/neobot/docs/plugin-development/`
-- 核心开发参考 `src/neobot/docs/core-concepts/`
+- 插件开发参考 `docs/plugin-development/`
+- 核心开发参考 `docs/core-concepts/`
 
 ## 许可证
 

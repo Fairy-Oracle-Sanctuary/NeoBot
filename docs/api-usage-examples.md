@@ -485,8 +485,8 @@ async def fetch_safe(url: str):
 
 更多高级功能和最佳实践，请参考框架的其他文档：
 
-- 插件开发：`src/neobot/docs/plugin-development/`
-- 核心概念：`src/neobot/docs/core-concepts/`
+- 插件开发：`docs/plugin-development/`
+- 核心概念：`docs/core-concepts/`
 - 安全实践：`docs/security-best-practices.md`
 
 ---

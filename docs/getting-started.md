@@ -99,7 +99,7 @@ db = "neobot"            # 数据库名称
 把 `uri` 改成你自己的 OneBot 地址，并按需填写 Redis / MySQL 凭据。
 
 > 敏感配置也可以通过环境变量覆盖（如 `MYSQL_PASSWORD` / `REDIS_PASSWORD` /
-> `NAPCAT_WS_URI`），详见 [安全最佳实践](../../docs/security-best-practices.md)。
+> `NAPCAT_WS_URI`），详见 [安全最佳实践](./security-best-practices.md)。
 
 ### b. 启动！
 

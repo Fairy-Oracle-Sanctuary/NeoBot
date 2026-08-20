@@ -45,7 +45,7 @@ playwright install chromium
 python scripts/compile_machine_code.py
 ```
 
-**注意**：编译产物是平台相关的，必须在目标服务器上执行。详见 [性能优化](../core-concepts/performance.md)。
+**注意**：编译产物是平台相关的，必须在目标服务器上执行。详见 [性能优化](core-concepts/performance.md)。
 
 ## 2. 进程管理
 

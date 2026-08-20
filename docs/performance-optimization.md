@@ -403,7 +403,7 @@ class RedisCache:
 > 单例 `redis_manager` 提供 `get` / `set` / `setex` / `hset` / `publish` /
 > `execute_lua_script` 等接口，并自动处理连接池与 pubsub 签名校验，插件无需
 > 自行创建连接。原子操作（Lua 脚本）详见
-> `src/neobot/docs/core-concepts/redis-atomic-operations.md`。
+> `docs/core-concepts/redis-atomic-operations.md`。
 
 ## 代码优化
 

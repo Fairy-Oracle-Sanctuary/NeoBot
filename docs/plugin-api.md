@@ -108,6 +108,6 @@ async def handle_broadcast(bot: Bot, event: MessageEvent, args: list[str]):
 
 ## 7. 相关文档
 
-- `src/neobot/docs/plugin-development/` — 插件开发指南(已按契约写法更新)
+- `docs/plugin-development/` — 插件开发指南(已按契约写法更新)
 - `docs/adapter-architecture.md` — 适配器架构与平台感知注册
 - `ROADMAP.md` — 插件系统解耦路线图(本契约是 1.1 的落地)

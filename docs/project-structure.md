@@ -88,7 +88,7 @@ src/neobot/
 - **api/**: OneBot API 封装（message / group / friend / account / media / base）
 - **handlers/**: 事件处理器，命令与消息分发核心
 - **managers/**: 各种管理器（单例，见 [核心管理器](core-concepts/singleton-managers.md)）
-- **messaging/**: 平台无关消息层，跨平台转发的基石（见 [适配器架构](../../docs/adapter-architecture.md)）
+- **messaging/**: 平台无关消息层，跨平台转发的基石（见 [适配器架构](./adapter-architecture.md)）
 - **services/**: 服务层（本地文件服务器等）
 - **utils/**: 工具函数
 
