@@ -2,18 +2,31 @@
 Echo 与交互插件
 
 提供 /echo 和 /赞我 指令。
+
+本插件为插件 API 契约 (plugin-api-v1) 的示范实现:
+- 只从 ``neobot.plugin_api`` 命名空间导入;
+- 使用 ``define_plugin`` 声明清单(新式契约插件)。
 """
-from neobot.core.managers.command_manager import matcher
-from neobot.core.bot import Bot
-from neobot.models.events.message import MessageEvent
+from neobot.plugin_api import (
+    Bot,
+    MessageEvent,
+    ModuleLogger,
+    command,
+    define_plugin,
+    platform_command,
+)
 
-__plugin_meta__ = {
-    "name": "echo",
-    "description": "提供 echo 和 赞我 功能",
-    "usage": "/echo [内容] - 复读内容\n/赞我 - 让机器人给你点赞",
-}
+logger = ModuleLogger("Echo")
 
-@matcher.platform_command(["qq", "discord"], "echo")
+plugin_manifest = define_plugin(
+    name="echo",
+    description="提供 echo 和 赞我 功能",
+    usage="/echo [内容] - 复读内容\n/赞我 - 让机器人给你点赞",
+    version="0.1.0",
+    author="镀铬酸钾",
+)
+
+@platform_command(["qq", "discord"], "echo")
 async def handle_echo(bot: Bot, event: MessageEvent, args: list[str]):
     """
     处理 echo 指令，原样回复用户输入的内容
@@ -29,7 +42,7 @@ async def handle_echo(bot: Bot, event: MessageEvent, args: list[str]):
 
     await event.reply(reply_msg)
 
-@matcher.platform_command(
+@platform_command(
     ["qq", "discord"],
     "赞我",
     override_permission_check=True

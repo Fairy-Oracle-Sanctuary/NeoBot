@@ -7,8 +7,8 @@
 在 `src/neobot/plugins/` 目录下创建一个新文件，例如 `my_simple_plugin.py`：
 
 ```python
-from neobot.core.plugin import SimplePlugin
-from neobot.models import MessageEvent
+from neobot.plugin_api import SimplePlugin
+from neobot.plugin_api import MessageEvent
 
 class MyPlugin(SimplePlugin):
     
@@ -99,8 +99,8 @@ async def whoami(self, event: MessageEvent):
 虽然 `SimplePlugin` 旨在简化开发，但你仍然可以使用装饰器来处理更复杂的场景，例如权限控制或监听非指令消息。
 
 ```python
-from neobot.core.plugin import SimplePlugin, command, on_message
-from neobot.core.permission import Permission
+from neobot.plugin_api import SimplePlugin, command, on_message
+from neobot.plugin_api import Permission
 
 class AdvancedPlugin(SimplePlugin):
     

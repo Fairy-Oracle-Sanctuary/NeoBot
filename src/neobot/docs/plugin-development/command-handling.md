@@ -7,10 +7,9 @@
 在处理器函数里声明 `args: list[str]`，框架会把命令名之后、按空白切分的内容注入进来。
 
 ```python
-from neobot.core.managers.command_manager import matcher
-from neobot.models import MessageEvent
+from neobot.plugin_api import MessageEvent, command
 
-@matcher.command("echo")
+@command("echo")
 async def handle_echo(bot, event: MessageEvent, args: list[str]):
     # 如果用户发送 /echo hello world
     # args 的值就是 ["hello", "world"]
@@ -27,7 +26,7 @@ async def handle_echo(bot, event: MessageEvent, args: list[str]):
 框架只负责把参数按空白切分注入 `args`，**不会根据类型提示自动转换**。需要数值时请手动转换：
 
 ```python
-@matcher.command("add")
+@command("add")
 async def handle_add(bot, event: MessageEvent, args: list[str]):
     # /add 10 20
     if len(args) < 2:
@@ -70,12 +69,9 @@ async def handle_add(bot, event: MessageEvent, args: list[str]):
 
 ```python
 # src/neobot/plugins/echo_plus.py
-from neobot.core.managers.command_manager import matcher
-from neobot.core.permission import Permission
-from neobot.core.bot import Bot
-from neobot.models import MessageEvent
+from neobot.plugin_api import Bot, MessageEvent, Permission, command
 
-@matcher.command("echo_plus", permission=Permission.ADMIN)
+@command("echo_plus", permission=Permission.ADMIN)
 async def echo_plus(bot: Bot, event: MessageEvent, args: list[str], permission_granted: bool):
     """
     一个更强大的回声命令
@@ -100,10 +96,9 @@ async def echo_plus(bot: Bot, event: MessageEvent, args: list[str], permission_g
 新插件建议直接使用 `platform_command`，一次注册即可同时覆盖 QQ 与 Discord 平台：
 
 ```python
-from neobot.core.managers.command_manager import matcher
-from neobot.core.permission import Permission
+from neobot.plugin_api import Permission, platform_command
 
-@matcher.platform_command(["qq", "discord"], "echo_plus", permission=Permission.ADMIN)
+@platform_command(["qq", "discord"], "echo_plus", permission=Permission.ADMIN)
 async def echo_plus(bot, event, args: list[str]):
     # event 在 QQ 平台是 MessageEvent，在 Discord 平台是 CommandContext，
     # 两者都支持 event.reply(...) / event.user_id 等属性
@@ -112,10 +107,12 @@ async def echo_plus(bot, event, args: list[str]):
 
 ## 4. 通用消息处理
 
-除了指令，还可以用 `@matcher.on_message()` 监听所有消息（非指令触发的消息）：
+除了指令，还可以用 `@on_message()` 监听所有消息（非指令触发的消息）：
 
 ```python
-@matcher.on_message(priority=10, block=False)
+from neobot.plugin_api import on_message
+
+@on_message(priority=10, block=False)
 async def handle_all_messages(bot, event: MessageEvent):
     # 不响应用户，只是记录
     logger.debug(f"收到消息: {event.raw_message}")
@@ -124,4 +121,4 @@ async def handle_all_messages(bot, event: MessageEvent):
 - `priority`: 处理器优先级，数值越小越先执行，默认 10。
 - `block`: 是否阻断后续处理器，默认 False。
 
-平台版本为 `@matcher.platform_message(["qq", "discord"], priority=1, block=False)`。
+平台版本为 `@platform_message(["qq", "discord"], priority=1, block=False)`。

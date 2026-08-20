@@ -9,19 +9,22 @@
 ```python
 # src/neobot/plugins/hello.py
 
-from neobot.core.managers.command_manager import matcher
-from neobot.models import MessageEvent
+from neobot.plugin_api import MessageEvent, command, define_plugin
 
-# __plugin_meta__ 是插件元信息，会在 /help 指令里显示
-__plugin_meta__ = {
-    "name": "你好世界",
-    "description": "一个简单的示例插件",
-    "usage": "/hello - 发送你好"
-}
+# plugin_manifest 声明插件清单(新式契约插件,plugin-api-v1),
+# 会在 /help 指令里显示;同时声明 api_version 即成为"契约插件",
+# 加载时会校验只使用 neobot.plugin_api 命名空间。
+plugin_manifest = define_plugin(
+    name="hello",
+    description="一个简单的示例插件",
+    usage="/hello - 发送你好",
+    version="0.1.0",
+    author="镀铬酸钾",
+)
 
-# @matcher.command() 装饰器注册一个命令
+# @command() 装饰器注册一个命令
 # 命令名以及所有别名都作为位置参数传入
-@matcher.command("hello", "hi", "你好")
+@command("hello", "hi", "你好")
 async def handle_hello(event: MessageEvent):
     """
     处理 /hello 命令
@@ -33,8 +36,12 @@ async def handle_hello(event: MessageEvent):
 > 新插件建议使用平台感知注册（`platform_command`），以便同时支持 QQ / Discord：
 >
 > ```python
-> @matcher.platform_command(["qq", "discord"], "hello", "hi", "你好")
-> async def handle_hello(bot, event: MessageEvent, args: list[str]):
+> from neobot.plugin_api import Bot, MessageEvent, define_plugin, platform_command
+>
+> plugin_manifest = define_plugin(name="hello", description="示例", usage="/hello - 发送你好")
+>
+> @platform_command(["qq", "discord"], "hello", "hi", "你好")
+> async def handle_hello(bot: Bot, event: MessageEvent, args: list[str]):
 >     await event.reply(f"你好，{event.sender.nickname}！")
 > ```
 
@@ -55,30 +62,31 @@ Bot 应该会回复你：“你好，[你的昵称]！”
 
 ## 插件剖析
 
-### `__plugin_meta__`
+### `plugin_manifest`(或旧式 `__plugin_meta__`)
 
-这个字典不是必须的，但强烈建议写上。它定义了插件的元信息，主要给 `/help` 命令用。
+清单不是必须的，但强烈建议写上。它定义了插件的元信息，主要给 `/help` 命令用。
 
 *   `name`: 插件叫啥。
 *   `description`: 这插件是干嘛的。
 *   `usage`: 怎么用，写上具体的指令和说明。
+*   `version` / `author` / `api_version`: 新式清单附加字段（`define_plugin` 自动填充默认值）。
 
-### `@matcher.command()`
+### `@command()`
 
 这是最核心的装饰器，用来注册一个命令处理器。
 
 ```python
-@matcher.command(*names, permission=None, override_permission_check=False)
+@command(*names, permission=None, override_permission_check=False)
 ```
 
-*   **`*names`**: 命令名以及别名，如 `@matcher.command("hello", "hi")`。
+*   **`*names`**: 命令名以及别名，如 `@command("hello", "hi")`。
 *   `permission`: `Permission` 枚举（`USER` / `OP` / `ADMIN`），默认为 `None`（所有用户可用）。
 *   `override_permission_check`: `bool`，设为 `True` 时不拦截无权限用户，而是把检查结果
     通过 `permission_granted` 参数传给处理器，由函数自行处理。
 
 ### 处理器函数
 
-被 `@matcher.command()` 装饰的函数就是处理器。它必须是一个 `async` 异步函数。
+被 `@command()` 装饰的函数就是处理器。它必须是一个 `async` 异步函数。
 
 *   **参数**: 框架会按**参数名**自动注入你需要的对象，你只需要声明需要什么：
     *   `event: MessageEvent`: 最常用，包含发送者、群号、消息内容等。

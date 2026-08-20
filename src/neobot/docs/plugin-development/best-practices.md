@@ -11,7 +11,7 @@
 
 如果你必须运行同步代码（比如图像处理、复杂计算）：
 ```python
-from neobot.core.utils.executor import run_in_thread_pool
+from neobot.plugin_api import run_in_thread_pool
 
 # 扔到线程池里去跑，别占着主线程
 result = await run_in_thread_pool(heavy_function, arg1, arg2)
@@ -40,7 +40,7 @@ result = await run_in_thread_pool(heavy_function, arg1, arg2)
 Redis 就在那里，不用白不用。
 
 ```python
-from neobot.core.managers.redis_manager import redis_manager
+from neobot.plugin_api import redis_manager
 
 # 存（带过期时间）
 await redis_manager.set("weather:beijing", "sunny", ex=3600)
