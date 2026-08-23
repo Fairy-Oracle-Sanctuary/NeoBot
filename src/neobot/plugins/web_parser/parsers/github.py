@@ -154,6 +154,16 @@ class GitHubParser(BaseParser):
             List[Any]: 消息段列表
         """
         nodes = []
+
+        # 平均解析时长（附加到结果，来自 parse_stats）
+        avg_line = ""
+        try:
+            from ..parse_stats import average_parse, fmt_cost
+            avg_ms = await average_parse("github")
+            if avg_ms is not None:
+                avg_line = f"📊 平均解析时长: {fmt_cost(avg_ms)}"
+        except Exception:
+            pass
         
         # 生成图片
         image_base64 = await self.generate_repo_image(data)
@@ -165,6 +175,12 @@ class GitHubParser(BaseParser):
                 message=MessageSegment.image(image_base64)
             )
             nodes.append(image_node)
+            if avg_line:
+                nodes.append(event.bot.build_forward_node(
+                    user_id=event.self_id,
+                    nickname=self.nickname,
+                    message=avg_line,
+                ))
         else:
             # 如果图片生成失败，发送文本信息
             text_message = (
@@ -178,6 +194,7 @@ class GitHubParser(BaseParser):
                 f"   Fork: {data.get('forks_count', 0)}\n"
                 f"   Issues: {data.get('open_issues_count', 0)}\n"
                 f"   关注: {data.get('watchers_count', 0)}\n"
+                + (f"{avg_line}\n" if avg_line else "")
             )
             text_node = event.bot.build_forward_node(
                 user_id=event.self_id, 

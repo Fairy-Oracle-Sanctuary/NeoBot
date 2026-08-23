@@ -174,6 +174,14 @@ class XhsParser(BaseParser):
             text_parts.append(f" 类型: 图集（{len(data['images'])} 张）")
         else:
             text_parts.append(" 类型: 视频")
+        # 平均解析时长（附加到结果，来自 parse_stats）
+        try:
+            from ..parse_stats import average_parse, fmt_cost
+            avg_ms = await average_parse("xhs")
+            if avg_ms is not None:
+                text_parts.append(f"📊 平均解析时长: {fmt_cost(avg_ms)}")
+        except Exception:
+            pass
         text_parts.append("--------------------")
         text_message = "\n".join(text_parts)
 

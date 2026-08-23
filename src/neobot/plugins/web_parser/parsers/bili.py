@@ -625,6 +625,16 @@ class BiliParser(BaseParser):
             else:
                 video_message = "视频解析失败，无法获取直链。"
 
+        # 平均解析时长（附加到结果，来自 parse_stats）
+        avg_line = ""
+        try:
+            from ..parse_stats import average_parse, fmt_cost
+            avg_ms = await average_parse("bili")
+            if avg_ms is not None:
+                avg_line = f"\n📊 平均解析时长: {fmt_cost(avg_ms)}"
+        except Exception:
+            pass
+
         text_message = (
             f"BiliBili 视频解析\n"
             f"--------------------\n"
@@ -642,6 +652,7 @@ class BiliParser(BaseParser):
             f"   收藏: {self.format_count(data['favorite'])}\n"
             f"   转发: {self.format_count(data['share'])}\n"
             f"   弹幕: {self.format_count(data.get('danmaku', 0))}\n"
+            f"{avg_line}"
         )
         
         image_message_segment = [

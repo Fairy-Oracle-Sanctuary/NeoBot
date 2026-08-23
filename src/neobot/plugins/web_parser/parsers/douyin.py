@@ -777,6 +777,14 @@ class DouyinParser(BaseParser):
             cost_str = f"{cost_ms / 1000:.1f}s" if cost_ms >= 1000 else f"{cost_ms}ms"
             text_parts.append(f" 解析接口: {api_display}")
             text_parts.append(f" 解析耗时: {cost_str}")
+            # 平均解析时长（来自 parse_stats）
+            try:
+                from ..parse_stats import average_parse, fmt_cost
+                avg_ms = await average_parse("douyin")
+                if avg_ms is not None:
+                    text_parts.append(f" 📊 平均解析时长: {fmt_cost(avg_ms)}")
+            except Exception:
+                pass
             text_parts.append("--------------------")
         
         if original_text:

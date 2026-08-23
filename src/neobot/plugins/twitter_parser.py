@@ -448,8 +448,8 @@ def _format_created_at(created_at: Optional[str]) -> str:
         return created_at
 
 
-def _build_tweet_card(tweet: dict) -> str:
-    """构建推文文本卡片。"""
+def _build_tweet_card(tweet: dict, avg_line: str = "") -> str:
+    """构建推文文本卡片（avg_line: 平均解析时长行，可选）。"""
     author = tweet.get("author") or {}
     name = author.get("name") or "未知用户"
     screen_name = author.get("screen_name") or "unknown"
@@ -485,6 +485,8 @@ def _build_tweet_card(tweet: dict) -> str:
     created = _format_created_at(tweet.get("created_at"))
     if created:
         lines.append(f"🕐 {created} (UTC)")
+    if avg_line:
+        lines.append(avg_line.strip())
     if tweet.get("url"):
         lines.append(f"🔗 {tweet['url']}")
     return "\n".join(lines)
@@ -624,7 +626,17 @@ async def _send_tweet(event: MessageEvent, tweet: dict):
     photos, videos = _collect_media(tweet)
     sensitive = bool(tweet.get("possibly_sensitive"))
 
-    card = _build_tweet_card(tweet)
+    # 平均解析时长（附加到卡片，来自 parse_stats）
+    avg_line = ""
+    try:
+        from neobot.plugins.web_parser.parse_stats import average_parse, fmt_cost
+        avg_ms = await average_parse("twitter")
+        if avg_ms is not None:
+            avg_line = f"\n📊 平均解析时长: {fmt_cost(avg_ms)}"
+    except Exception:
+        pass
+
+    card = _build_tweet_card(tweet, avg_line=avg_line)
     if share_text:
         card = f"分享内容：{share_text}\n\n{card}"
     try:

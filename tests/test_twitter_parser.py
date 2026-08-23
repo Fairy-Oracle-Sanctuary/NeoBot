@@ -43,6 +43,20 @@ def test_build_tweet_card():
     assert "2022-02-15 21:21" in card
 
 
+def test_build_tweet_card_with_avg_line():
+    """传入平均解析时长行时卡片包含该行。"""
+    tweet = {
+        "text": "hello",
+        "author": {"name": "t", "screen_name": "s"},
+        "url": "https://x.com/tester/status/1",
+    }
+    card = tp._build_tweet_card(tweet, avg_line="📊 平均解析时长: 1.2s")
+    assert "📊 平均解析时长: 1.2s" in card
+    # 无 avg_line 时不出现该行
+    card2 = tp._build_tweet_card(tweet)
+    assert "平均解析时长" not in card2
+
+
 def test_collect_media():
     tweet = {
         "media": {
