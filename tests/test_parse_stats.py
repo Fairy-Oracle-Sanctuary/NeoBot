@@ -77,9 +77,8 @@ async def test_slow_alert_triggers_once_per_cooldown(monkeypatch):
         def get_all_bots(self):
             return [FakeBot()]
 
-    # _alert_slow 内部 from neobot.plugin_api import bot_manager，patch 导入源
-    import neobot.plugin_api as plugin_api_mod
-    monkeypatch.setattr(plugin_api_mod, "bot_manager", FakeBotManager())
+    # patch parse_stats 模块级的 bot_manager（_alert_slow 直接引用）
+    monkeypatch.setattr(ps, "bot_manager", FakeBotManager())
     # 完全隔离：mock 掉 Redis 写入与平均查询，只测告警逻辑
     monkeypatch.setattr(ps, "_record_redis", _noop)
     monkeypatch.setattr(ps, "average_parse", _fake_avg)
@@ -114,8 +113,7 @@ async def test_fast_parse_no_alert(monkeypatch):
         def get_all_bots(self):
             return [FakeBot()]
 
-    import neobot.plugin_api as plugin_api_mod
-    monkeypatch.setattr(plugin_api_mod, "bot_manager", FakeBotManager())
+    monkeypatch.setattr(ps, "bot_manager", FakeBotManager())
     monkeypatch.setattr(ps, "_record_redis", _noop)
     monkeypatch.setattr(ps, "average_parse", _fake_avg)
 

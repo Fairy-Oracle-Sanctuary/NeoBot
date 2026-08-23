@@ -10,7 +10,7 @@
 import time
 from typing import Optional
 
-from neobot.plugin_api import redis_manager, logger
+from neobot.plugin_api import redis_manager, bot_manager, logger
 
 # 开发者 QQ（与 wanfeng_review.py 保持一致）
 ADMIN_QQ = 2221577113
@@ -101,7 +101,6 @@ async def _alert_slow(parser: str, cost_ms: int) -> None:
         return
 
     try:
-        from neobot.plugin_api import bot_manager
         bots = bot_manager.get_all_bots()
         if not bots:
             return
