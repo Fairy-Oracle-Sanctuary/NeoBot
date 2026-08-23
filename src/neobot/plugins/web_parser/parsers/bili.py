@@ -88,10 +88,10 @@ class BiliParser(BaseParser):
         
         try:
             if BILI_API_AVAILABLE:
-                # 使用 bilibili-api-python 库
+                # 使用 bilibili-api-python 库（加总超时，防止代理慢导致挂起数十秒）
                 credential = self._get_credential()
                 v = video.Video(bvid=bvid, credential=credential)
-                info = await v.get_info()
+                info = await asyncio.wait_for(v.get_info(), timeout=10)
                 
                 # 处理封面 URL
                 cover_url = info.get('pic', '')
@@ -331,15 +331,17 @@ class BiliParser(BaseParser):
         try:
             credential = self._get_credential()
             v = video.Video(bvid=bvid, credential=credential)
-            # 先获取视频信息以获取 cid
-            info = await v.get_info()
+            # 先获取视频信息以获取 cid（加超时，防止代理慢挂起）
+            info = await asyncio.wait_for(v.get_info(), timeout=10)
             cid = info.get('cid', 0)
             
             if not cid:
                 return None
             
             # 获取下载链接数据，使用 html5=True 获取网页格式（通常包含合并的音视频）
-            download_url_data = await v.get_download_url(cid=cid, html5=True)
+            download_url_data = await asyncio.wait_for(
+                v.get_download_url(cid=cid, html5=True), timeout=10
+            )
             
             # 使用 VideoDownloadURLDataDetecter 解析数据
             detecter = video.VideoDownloadURLDataDetecter(data=download_url_data)
@@ -350,7 +352,9 @@ class BiliParser(BaseParser):
             # 如果没有获取到流，尝试其他格式
             if not streams:
                 logger.warning(f"[{self.name}] 无法获取 html5 格式，尝试获取其他格式...")
-                download_url_data = await v.get_download_url(cid=cid, html5=False)
+                download_url_data = await asyncio.wait_for(
+                    v.get_download_url(cid=cid, html5=False), timeout=10
+                )
                 detecter = video.VideoDownloadURLDataDetecter(data=download_url_data)
                 streams = detecter.detect_best_streams()
             
