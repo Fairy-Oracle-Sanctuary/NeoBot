@@ -58,6 +58,7 @@ class XhsParser(BaseParser):
 
     def __init__(self):
         super().__init__()
+        self.parser_name = "xhs"
         self.name = "小红书解析器"
         self.nickname = "小红书笔记解析"
         self.url_pattern = re.compile(

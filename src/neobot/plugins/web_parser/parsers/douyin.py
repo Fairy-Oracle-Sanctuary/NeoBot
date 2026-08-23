@@ -35,6 +35,7 @@ class DouyinParser(BaseParser):
     
     def __init__(self):
         super().__init__()
+        self.parser_name = "douyin"
         self.name = "抖音解析器"
         self.url_pattern = re.compile(r"https?://v\.douyin\.com/[a-zA-Z0-9_-]+/?", re.IGNORECASE)
         self.short_pattern = re.compile(r"(?:https?://)?v\.douyin\.com/[a-zA-Z0-9_-]+/?", re.IGNORECASE)

@@ -77,7 +77,16 @@ async def handle_github_command(bot, event: MessageEvent):
         
         # 构建仓库URL
         repo_url = f"https://github.com/{owner}/{repo}"
-        # 使用GitHub解析器处理
-        await github_parser.process_url(event, repo_url)
+        # 使用GitHub解析器处理（记录耗时，超 1s 提醒开发者）
+        import time as _time
+        from .parse_stats import record_parse
+        _start = _time.monotonic()
+        try:
+            await github_parser.process_url(event, repo_url)
+        finally:
+            try:
+                await record_parse("github", (_time.monotonic() - _start) * 1000)
+            except Exception:
+                pass
     else:
         await event.reply("参数格式错误，请输入：/查仓库 作者/仓库名")

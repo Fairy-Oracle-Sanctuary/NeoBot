@@ -307,11 +307,21 @@ class BaseParser(metaclass=abc.ABCMeta):
         if not url_to_process:
             url_to_process = self.extract_url_from_text_segments(event.message)
 
-        # 3. 如果找到了链接，则进行处理
+        # 3. 如果找到了链接，则进行处理（记录解析耗时，超 1s 提醒开发者）
         if url_to_process and self.should_handle_url(url_to_process):
             if self.react_ok_on_handle:
                 await self.react_ok(event)
-            await self.process_url(event, url_to_process)
+            parser_name = getattr(self, "parser_name", self.__class__.__name__)
+            start = time.monotonic()
+            try:
+                await self.process_url(event, url_to_process)
+            finally:
+                cost_ms = (time.monotonic() - start) * 1000
+                from .parse_stats import record_parse
+                try:
+                    await record_parse(parser_name, cost_ms)
+                except Exception:
+                    pass
     
     def should_handle_url(self, url: str) -> bool:
         """

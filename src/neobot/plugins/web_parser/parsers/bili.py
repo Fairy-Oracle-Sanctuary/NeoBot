@@ -48,6 +48,7 @@ class BiliParser(BaseParser):
     
     def __init__(self):
         super().__init__()
+        self.parser_name = "bili"
         self.name = "B站解析器"
         self.url_pattern = re.compile(r"https?://(?:www\.)?(bilibili\.com/video/\w+|b23\.tv/[a-zA-Z0-9]+)")
         self.nickname = "B站视频解析"

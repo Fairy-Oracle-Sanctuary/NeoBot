@@ -742,8 +742,17 @@ async def _build_media_forward_nodes(
 
 
 async def process_tweet(event: MessageEvent, tweet_id: str):
-    """获取并发送推文解析结果。"""
-    data = await fetch_tweet(tweet_id)
+    """获取并发送推文解析结果（记录解析耗时，超 1s 提醒开发者）。"""
+    start = time.monotonic()
+    try:
+        data = await fetch_tweet(tweet_id)
+    finally:
+        cost_ms = (time.monotonic() - start) * 1000
+        from neobot.plugins.web_parser.parse_stats import record_parse
+        try:
+            await record_parse("twitter", cost_ms)
+        except Exception:
+            pass
     if data is None:
         await reply_with_error_cooldown(event, "推特解析失败，请稍后再试。")
         return

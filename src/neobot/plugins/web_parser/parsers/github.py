@@ -18,6 +18,7 @@ class GitHubParser(BaseParser):
     
     def __init__(self):
         super().__init__()
+        self.parser_name = "github"
         self.name = "GitHub解析器"
         self.url_pattern = re.compile(r"https?://(?:www\.)?github\.com/([\w\-]+)/([\w\-\.]+)(?:/[^\s]*)?")
         self.nickname = "GitHub仓库信息"
