@@ -72,9 +72,10 @@ async def record_parse(parser: str, cost_ms: float) -> None:
 async def average_parse(parser: str) -> Optional[float]:
     """
     计算某解析器最近解析的平均耗时（毫秒）。
+    无历史样本时返回最近一次记录（保证显示有值，即"本次耗时"）。
 
     Returns:
-        平均毫秒数；无样本返回 None。
+        平均毫秒数；完全无记录返回 None。
     """
     try:
         r = redis_manager.redis

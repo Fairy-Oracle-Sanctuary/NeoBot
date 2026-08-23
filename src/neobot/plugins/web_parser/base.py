@@ -243,6 +243,7 @@ class BaseParser(metaclass=abc.ABCMeta):
             
             # 解析URL（最多尝试 max_parse_attempts 次）
             data = None
+            parse_start = time.monotonic()
             for attempt in range(1, self.max_parse_attempts + 1):
                 data = await self.parse(real_url)
                 if data:
@@ -258,6 +259,14 @@ class BaseParser(metaclass=abc.ABCMeta):
                 logger.error(f"[{self.name}] 重试 {self.max_parse_attempts} 次后仍无法从 {real_url} 解析信息。")
                 await self.reply_with_error_cooldown(event, "无法获取链接信息，可能是接口变动或链接不存在。")
                 return
+
+            # 解析完成即记录耗时（在 format_response 之前，保证本次记录可查）
+            parser_name = getattr(self, "parser_name", self.__class__.__name__)
+            try:
+                from .parse_stats import record_parse
+                await record_parse(parser_name, (time.monotonic() - parse_start) * 1000)
+            except Exception:
+                pass
             
             # 格式化响应
             response = await self.format_response(event, data)
@@ -307,21 +316,11 @@ class BaseParser(metaclass=abc.ABCMeta):
         if not url_to_process:
             url_to_process = self.extract_url_from_text_segments(event.message)
 
-        # 3. 如果找到了链接，则进行处理（记录解析耗时，超 1s 提醒开发者）
+        # 3. 如果找到了链接，则进行处理（耗时记录在 process_url 内部 parse 完成后）
         if url_to_process and self.should_handle_url(url_to_process):
             if self.react_ok_on_handle:
                 await self.react_ok(event)
-            parser_name = getattr(self, "parser_name", self.__class__.__name__)
-            start = time.monotonic()
-            try:
-                await self.process_url(event, url_to_process)
-            finally:
-                cost_ms = (time.monotonic() - start) * 1000
-                from .parse_stats import record_parse
-                try:
-                    await record_parse(parser_name, cost_ms)
-                except Exception:
-                    pass
+            await self.process_url(event, url_to_process)
     
     def should_handle_url(self, url: str) -> bool:
         """

@@ -483,25 +483,31 @@ class DouyinParser(BaseParser):
         Returns:
             Optional[Dict[str, Any]]: 视频信息字典，如果失败则返回None
         """
-        # 解析整体超时（秒），对标 Java 版的 OVERALL_TIMEOUT_SECONDS
-        overall_timeout = 60
+        # 解析整体超时（秒）：主通道并发后，主通道最坏 ~15s + 备用并发兜底
+        overall_timeout = 25
         parse_start = time.monotonic()
 
-        # ---- 主通道：依次串行尝试，命中即返回 ----
+        # ---- 主通道：并发尝试（douyin_web 通常 0.8s 秒回，qzqi 备用），命中即返回 ----
         primary_channels = [
             ("douyin_web", parse_douyin_web(url)),
             ("qzqi", self._parse_api_qzqi_douyin(url)),
         ]
-        for idx, (api_name, coro) in enumerate(primary_channels):
+
+        async def try_primary(coro, api_name: str) -> tuple:
             try:
                 result = await coro
             except Exception as e:
                 logger.error(f"[{self.name}] {api_name} API异常: {e}")
                 result = None
+            return (result, api_name)
+
+        primary_tasks = [try_primary(coro, name) for name, coro in primary_channels]
+        for coro in asyncio.as_completed(primary_tasks, timeout=15):
+            try:
+                result, api_name = await coro
+            except asyncio.TimeoutError:
+                break
             if result:
-                # 关闭后续未执行的协程，避免 asyncio "never awaited" 泄漏警告
-                for _, leftover in primary_channels[idx + 1:]:
-                    leftover.close()
                 logger.info(f"[{self.name}] 使用 {api_name} API 成功解析")
                 result["_api_name"] = api_name
                 result["_parse_cost_ms"] = int((time.monotonic() - parse_start) * 1000)
