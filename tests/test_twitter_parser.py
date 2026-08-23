@@ -153,3 +153,73 @@ def test_watermark_video_returns_none_when_server_down(monkeypatch):
         assert await tp._watermark_video("https://video.twimg.com/v.mp4") is None
 
     asyncio.run(scenario())
+
+
+def test_watermark_image_returns_none_when_ffmpeg_missing(monkeypatch):
+    """ffmpeg 不可用时图片水印直接返回 None（调用方回退原图）。"""
+    monkeypatch.setattr(tp, "FFMPEG_AVAILABLE", False)
+
+    async def scenario():
+        assert await tp._watermark_image("https://pbs.twimg.com/media/x.jpg") is None
+
+    asyncio.run(scenario())
+
+
+def test_watermark_image_returns_none_when_server_down(monkeypatch):
+    """本地文件服务器未启动时图片水印返回 None。"""
+    monkeypatch.setattr(tp, "FFMPEG_AVAILABLE", True)
+    monkeypatch.setattr(
+        tp, "get_local_file_server", lambda: type("S", (), {"site": None})(),
+    )
+
+    async def scenario():
+        assert await tp._watermark_image("https://pbs.twimg.com/media/x.jpg") is None
+
+    asyncio.run(scenario())
+
+
+def test_watermark_image_uses_original_url_not_local():
+    """
+    回归测试：水印必须接收原始 twimg URL 而非本地中转 URL。
+    download_file 的 SSRF 校验拒绝回环地址（127.0.0.1），
+    若调用方传本地 URL，水印必然静默失效（fail-closed 审查发现的 bug）。
+    """
+    from neobot.core.utils.input_validator import InputValidator
+
+    validator = InputValidator()
+    assert not validator.validate_http_url("http://127.0.0.1:3003/download?id=x")
+    assert validator.validate_http_url("https://pbs.twimg.com/media/abc.jpg")
+
+
+def test_send_media_passes_original_url_to_watermark(monkeypatch):
+    """
+    行为回归：_send_media 必须把原始 twimg URL 传给 _watermark_image，
+    而不是 _download_media_urls 产出的本地中转 URL（否则 SSRF 校验拒绝、
+    水印静默失效）。mock 掉下载/水印/发送，断言传入水印的是原始 URL。
+    """
+    calls: list = []
+
+    async def fake_download(urls, timeout=60):
+        return ["http://127.0.0.1:3003/download?id=local" for _ in urls]
+
+    async def fake_watermark(url):
+        calls.append(url)
+        return None  # 模拟水印失败 → 回退本地 URL
+
+    monkeypatch.setattr(tp, "_download_media_urls", fake_download)
+    monkeypatch.setattr(tp, "_watermark_image", fake_watermark)
+
+    class FakeEvent:
+        async def reply(self, segments):
+            self.segments = segments
+
+    async def scenario():
+        event = FakeEvent()
+        await tp._send_media(event, ["https://pbs.twimg.com/media/a.jpg"], [])
+        return event
+
+    event = asyncio.run(scenario())
+    # 传给水印的是原始 URL；回退发送的是本地 URL（协议层 segment 的 URL 在 data.file）
+    assert calls == ["https://pbs.twimg.com/media/a.jpg"]
+    sent_url = event.segments[0].data.get("file", "")
+    assert sent_url == "http://127.0.0.1:3003/download?id=local"

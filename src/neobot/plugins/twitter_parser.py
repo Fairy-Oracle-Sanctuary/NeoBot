@@ -236,6 +236,84 @@ async def _watermark_video(video_url: str) -> Optional[str]:
             os.unlink(out_path)
 
 
+async def _watermark_image(image_url: str) -> Optional[str]:
+    """
+    下载推文图片 → ffmpeg 打同款时间戳水印（右下角清晰 + 轻量铺底，
+    与视频水印视觉对齐）→ 随机元数据改指纹 → 注册本地文件服务器。
+
+    Returns:
+        处理后的本地访问 URL；ffmpeg 不可用/下载失败/处理失败时返回 None
+        （调用方回退原图逻辑）。
+    """
+    if not FFMPEG_AVAILABLE:
+        return None
+    server = get_local_file_server()
+    if not server or server.site is None:
+        return None
+
+    out_path: Optional[str] = None
+    try:
+        file_id = await server.download_file(image_url, timeout=60, headers=_TWIMG_HEADERS)
+        if not file_id:
+            logger.error("[TwitterParser] 图片水印：下载失败")
+            return None
+        src_path = server.download_dir / file_id
+
+        # 输出统一为 jpg（源可能是 webp/png，ffmpeg 自动解码）
+        out_fd, out_path = tempfile.mkstemp(suffix=".jpg", dir=server.download_dir)
+        os.close(out_fd)
+
+        ts_text = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        meta_time = _random_meta_time()
+
+        # 图片版滤镜：右下角清晰时间戳（与视频同款样式）+ 一条轻量铺底
+        ts_escaped = ts_text.replace(":", r"\:")
+        vf = (
+            f"drawtext=text='{ts_escaped}':fontcolor=white@0.15:fontsize=h/26:"
+            f"y=h*0.06:x=(w-tw)/2,"
+            f"drawtext=text='{ts_escaped}':fontcolor=white@0.9:fontsize=h/30:"
+            f"borderw=2:bordercolor=black@0.7:x=w-text_w-20:y=h-text_h-20"
+        )
+
+        cmd = [
+            "ffmpeg", "-hide_banner", "-y",
+            "-i", str(src_path),
+            "-vf", vf,
+            "-q:v", "2",
+            # 清空原始元数据 + 写入随机元数据（改变文件指纹）
+            "-map_metadata", "-1",
+            "-metadata", f"title={_random_meta_title()}",
+            "-metadata", f"creation_time={meta_time}",
+            str(out_path),
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        if result.returncode != 0:
+            logger.error(f"[TwitterParser] 图片水印处理失败: {result.stderr[-300:]}")
+            return None
+        if os.path.getsize(out_path) == 0:
+            logger.error("[TwitterParser] 图片水印输出为空文件")
+            return None
+
+        # 注册到本地文件服务器（file_id 基于原 URL + 随机元数据，每次唯一）
+        wm_key = f"tw-wm-img://{image_url}|{meta_time}"
+        wm_id = server._generate_file_id(wm_key)
+        dest_path = server.download_dir / wm_id
+        shutil.copy2(out_path, dest_path)
+        server.file_map[wm_id] = dest_path
+        logger.info(f"[TwitterParser] 图片水印处理完成: {dest_path.stat().st_size} bytes")
+        return f"{server.base_url}/download?id={wm_id}"
+
+    except subprocess.TimeoutExpired:
+        logger.error("[TwitterParser] 图片水印处理超时（>120s）")
+        return None
+    except Exception as e:
+        logger.error(f"[TwitterParser] 图片水印异常: {type(e).__name__}: {e}")
+        return None
+    finally:
+        if out_path and os.path.exists(out_path):
+            os.unlink(out_path)
+
+
 # ── 开关状态 ─────────────────────────────────────────────────────
 
 def _scope_key(event: MessageEvent) -> str:
@@ -484,7 +562,14 @@ async def _send_media(event: MessageEvent, photos: List[str], videos: List[str])
     """
     if photos:
         media_urls = await _download_media_urls(photos[:4], timeout=60)
-        image_segments = [MessageSegment.image(url) for url in media_urls]
+        # 图片默认也打时间戳水印（与视频水印视觉对齐，改变文件指纹）。
+        # 注意：必须传原始 twimg URL 而非本地中转 URL（download_file 的
+        # SSRF 校验会拒绝 127.0.0.1 回环地址）；水印失败时回退本地 URL。
+        watermarked = []
+        for i, original_url in enumerate(photos[:4]):
+            wm_url = await _watermark_image(original_url)
+            watermarked.append(wm_url if wm_url else media_urls[i])
+        image_segments = [MessageSegment.image(url) for url in watermarked]
         try:
             await event.reply(image_segments)
         except Exception as e:
@@ -604,7 +689,13 @@ async def _build_media_forward_nodes(
 
     photo_count = min(len(photos), 4)
     photo_urls = await _download_media_urls(photos[:4], timeout=60)
-    for i, url in enumerate(photo_urls, 1):
+    # 与直发路径一致：图片默认打同款时间戳水印。
+    # 必须传原始 twimg URL（SSRF 校验拒绝本地回环），失败回退本地 URL。
+    watermarked_photos = []
+    for i, original_url in enumerate(photos[:4]):
+        wm_url = await _watermark_image(original_url)
+        watermarked_photos.append(wm_url if wm_url else photo_urls[i])
+    for i, url in enumerate(watermarked_photos, 1):
         try:
             nodes.append(
                 event.bot.build_forward_node(
