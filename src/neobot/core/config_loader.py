@@ -8,7 +8,7 @@ from pathlib import Path
 
 import tomllib
 from pydantic import ValidationError
-from .config_models import ConfigModel, NapCatWSModel, BotModel, RedisModel, DockerModel, ImageManagerModel, MySQLModel, ReverseWSModel, ThreadingModel, BilibiliModel, DouyinModel, JinmanModel, EhentaiModel, LocalFileServerModel, DiscordModel, CrossPlatformModel, LoggingModel, McCAdapterModel
+from .config_models import ConfigModel, NapCatWSModel, BotModel, RedisModel, DockerModel, ImageManagerModel, MySQLModel, ReverseWSModel, ThreadingModel, BilibiliModel, DouyinModel, JinmanModel, EhentaiModel, DivingFishModel, LocalFileServerModel, DiscordModel, CrossPlatformModel, LoggingModel, McCAdapterModel
 from .utils.logger import ModuleLogger
 from .utils.exceptions import ConfigError, ConfigNotFoundError, ConfigValidationError
 from .utils.env_loader import env_loader
@@ -335,9 +335,16 @@ class Config:
     @property
     def jinman(self) -> JinmanModel:
         """
-        获取禁漫天堂解析配置
+        获取禁漫天堂（JMComic）配置
         """
         return self._model.jinman
+
+    @property
+    def divingfish(self) -> DivingFishModel:
+        """
+        获取水鱼查分器（diving-fish）配置
+        """
+        return self._model.divingfish
 
     @property
     def ehentai(self) -> EhentaiModel:

@@ -130,6 +130,19 @@ class EhentaiModel(BaseModel):
     cookie: str = ""  # 可选：E-Hentai/ExHentai Cookie（访问 ExHentai 全部内容需要）
 
 
+class DivingFishModel(BaseModel):
+    """
+    对应 `config.toml` 中的 `[divingfish]` 配置块。
+
+    水鱼查分器（diving-fish.com）OAuth 配置，maimaiDX B50 查分插件使用。
+    申请入口：https://auth.diving-fish.com/console
+    """
+    client_id: str = ""  # 水鱼开发者控制台应用 ID
+    client_secret: str = ""  # 机密客户端凭据，仅存服务端
+    auth_base: str = "https://auth.diving-fish.com"  # 授权服务器
+    api_base: str = "https://www.diving-fish.com/api/maimaidxprober"  # 查分器 API
+
+
 class LocalFileServerModel(BaseModel):
     """
     对应 `config.toml` 中的 `[local_file_server]` 配置块。
@@ -275,6 +288,7 @@ class ConfigModel(BaseModel):
     douyin: DouyinModel = Field(default_factory=DouyinModel)
     jinman: JinmanModel = Field(default_factory=JinmanModel)
     ehentai: EhentaiModel = Field(default_factory=EhentaiModel)
+    divingfish: DivingFishModel = Field(default_factory=DivingFishModel)
     local_file_server: LocalFileServerModel = Field(default_factory=LocalFileServerModel)
     discord: DiscordModel = Field(default_factory=DiscordModel)
     cross_platform: CrossPlatformModel = Field(default_factory=CrossPlatformModel)

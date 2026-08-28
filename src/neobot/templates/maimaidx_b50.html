@@ -90,6 +90,11 @@
         background: rgba(255, 215, 0, 0.10);
         border-color: rgba(255, 215, 0, 0.22);
     }
+    .tag.approx {
+        color: #ff8a65;
+        background: rgba(255, 138, 101, 0.10);
+        border-color: rgba(255, 138, 101, 0.22);
+    }
 
     .rating-block {
         text-align: right;
@@ -286,7 +291,7 @@
             <div class="player-tags">
                 {% if dan %}<span class="tag dan">段位 · {{ dan|e }}</span>{% endif %}
                 {% if plate %}<span class="tag">牌子 · {{ plate|e }}</span>{% endif %}
-                <span class="tag">B50</span>
+                {% if approx %}<span class="tag approx">近似 B50 · 按最高 50 首</span>{% else %}<span class="tag">B50</span>{% endif %}
             </div>
         </div>
         <div class="rating-block">
@@ -334,7 +339,7 @@
     </div>
 
     <div class="footer">
-        <span>数据来源: 水鱼查分器 diving-fish.com · B50 = 最佳 35 首 + 最近 15 首</span>
+        <span>数据来源: 水鱼查分器 diving-fish.com · {% if approx %}近似 B50（无最近记录时间，按单曲 Rating 最高 50 首）{% else %}B50 = 最佳 35 首 + 最近 15 首{% endif %}</span>
         <span>查询耗时 {{ fetched_ms }}ms · NeoBot</span>
     </div>
 

@@ -6,7 +6,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from neobot.plugins.maimaidx.service import (
-    build_song_list, dan_name, cover_file_id, ra_color, level_color, FC_COLORS,
+    build_song_list, build_best50, dan_name, cover_file_id, ra_color, level_color,
+    FC_COLORS, subject_ref, mask_qq,
 )
 from neobot.plugins.maimaidx import _extract_at_qq
 
@@ -68,6 +69,36 @@ def test_build_song_list_fc_fs_badges():
 
 def test_build_song_list_empty():
     assert build_song_list({"charts": {"dx": [], "sd": []}}) == []
+
+
+def test_build_best50_takes_top50_sorted():
+    """完整成绩平铺列表 → ra 前 50，降序，装饰字段齐全。"""
+    records = [_chart(song_id=i, ra=300 - i, title=f"S{i}") for i in range(60)]
+    songs = build_best50(records)
+    assert len(songs) == 50
+    assert [s["ra"] for s in songs] == sorted([s["ra"] for s in songs], reverse=True)
+    assert songs[0]["title"] == "S0"
+    assert songs[-1]["ra"] == 300 - 49
+    assert songs[0]["rank"] == 1
+    assert songs[0]["ra_color"] == "#ffb300"  # ra 300 → 300 档色
+
+
+# ── OAuth 绑定辅助 ─────────────────────────────────────────────
+
+def test_subject_ref_stable_and_unique():
+    """ref 摘要：确定性 + 跨用户唯一 + 64 位 hex。"""
+    a1 = subject_ref("2221577113")
+    a2 = subject_ref("2221577113")
+    b = subject_ref("123456")
+    assert a1 == a2
+    assert a1 != b
+    assert len(a1) == 64
+    int(a1, 16)  # 合法 hex
+
+
+def test_mask_qq():
+    assert mask_qq("2221577113") == "QQ 22****13"
+    assert mask_qq("123") == "QQ ****"
 
 
 # ── 纯函数 ──────────────────────────────────────────────────────
