@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>maimaiDX B50</title>
+<style>
+    :root {
+        --bg: #0b0e1a;
+        --card: #171c2e;
+        --card-border: #232a42;
+        --text: #e8eaf0;
+        --text-dim: #8b93a7;
+        --text-faint: #5a6278;
+        --gold: #ffd700;
+        --gold2: #ffab00;
+        --dx: #4fc3f7;
+        --sd: #ffb74d;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+        font-family: 'Noto Sans SC', 'Noto Sans CJK SC', system-ui, -apple-system, sans-serif;
+        background: var(--bg);
+        background-image: radial-gradient(ellipse 900px 480px at 50% -160px, rgba(255, 215, 0, 0.055), transparent 70%);
+        color: var(--text);
+        -webkit-font-smoothing: antialiased;
+    }
+
+    .container {
+        width: 1360px;
+        margin: 0 auto;
+        padding: 44px 52px 36px;
+    }
+
+    /* ── Header ─────────────────────────── */
+    .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        padding: 30px 36px;
+        background: linear-gradient(180deg, #141a2c 0%, #10152a 100%);
+        border: 1px solid var(--card-border);
+        border-radius: 22px;
+        margin-bottom: 26px;
+        position: relative;
+        overflow: hidden;
+    }
+    .header::after {
+        content: "";
+        position: absolute;
+        right: -60px;
+        top: -90px;
+        width: 320px;
+        height: 320px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(255, 215, 0, 0.08), transparent 65%);
+        pointer-events: none;
+    }
+
+    .player-name {
+        font-size: 34px;
+        font-weight: 700;
+        letter-spacing: 0.5px;
+        line-height: 1.2;
+    }
+    .player-user {
+        font-size: 15px;
+        color: var(--text-dim);
+        margin-top: 4px;
+        font-variant-numeric: tabular-nums;
+    }
+    .player-tags {
+        display: flex;
+        gap: 10px;
+        margin-top: 14px;
+        flex-wrap: wrap;
+    }
+    .tag {
+        font-size: 13px;
+        padding: 5px 14px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.06);
+        color: var(--text-dim);
+        border: 1px solid rgba(255, 255, 255, 0.07);
+        white-space: nowrap;
+    }
+    .tag.dan {
+        color: #ffd9a0;
+        background: rgba(255, 215, 0, 0.10);
+        border-color: rgba(255, 215, 0, 0.22);
+    }
+
+    .rating-block {
+        text-align: right;
+        flex-shrink: 0;
+        position: relative;
+        z-index: 1;
+    }
+    .rating-label {
+        font-size: 14px;
+        letter-spacing: 4px;
+        color: var(--text-faint);
+        text-transform: uppercase;
+        margin-bottom: 2px;
+    }
+    .rating-value {
+        font-size: 78px;
+        font-weight: 800;
+        line-height: 1;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: -1px;
+        background: linear-gradient(180deg, var(--gold) 20%, var(--gold2) 90%);
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+        color: var(--gold);
+    }
+    .rating-sub {
+        font-size: 13px;
+        color: var(--text-faint);
+        margin-top: 6px;
+        font-variant-numeric: tabular-nums;
+    }
+
+    /* ── Grid ───────────────────────────── */
+    .grid {
+        display: grid;
+        grid-template-columns: repeat(5, 240px);
+        gap: 16px 14px;
+        justify-content: center;
+    }
+
+    .card {
+        background: var(--card);
+        border: 1px solid var(--card-border);
+        border-radius: 14px;
+        overflow: hidden;
+        transition: none;
+    }
+
+    .cover-wrap {
+        position: relative;
+        width: 240px;
+        height: 240px;
+        background: #12172a;
+        overflow: hidden;
+    }
+    .cover-wrap img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+    }
+    .cover-placeholder {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 64px;
+        color: #2a3350;
+        background: linear-gradient(135deg, #141a30 0%, #1a2140 100%);
+    }
+
+    .rank-badge {
+        position: absolute;
+        top: 8px;
+        left: 8px;
+        font-size: 12px;
+        font-weight: 700;
+        color: #fff;
+        padding: 3px 9px;
+        border-radius: 8px;
+        background: rgba(8, 10, 20, 0.72);
+        backdrop-filter: blur(2px);
+        font-variant-numeric: tabular-nums;
+        letter-spacing: 0.5px;
+    }
+
+    .level-badge {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        font-size: 13px;
+        font-weight: 800;
+        color: #fff;
+        padding: 3px 10px;
+        border-radius: 8px;
+        font-variant-numeric: tabular-nums;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+    }
+
+    .fc-badges {
+        position: absolute;
+        left: 8px;
+        bottom: 8px;
+        display: flex;
+        gap: 5px;
+    }
+    .fc-badge {
+        font-size: 11px;
+        font-weight: 700;
+        padding: 2px 8px;
+        border-radius: 7px;
+        background: rgba(8, 10, 20, 0.78);
+        backdrop-filter: blur(2px);
+        letter-spacing: 0.5px;
+    }
+
+    .info {
+        padding: 10px 12px 11px;
+    }
+    .title-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+    }
+    .type-mark {
+        flex-shrink: 0;
+        font-size: 10px;
+        font-weight: 800;
+        padding: 1px 6px;
+        border-radius: 5px;
+        letter-spacing: 0.5px;
+    }
+    .type-mark.dx { background: rgba(79, 195, 247, 0.16); color: var(--dx); }
+    .type-mark.sd { background: rgba(255, 183, 77, 0.16); color: var(--sd); }
+    .song-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        min-width: 0;
+    }
+
+    .stat-row {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        margin-top: 7px;
+    }
+    .stat-left {
+        font-size: 12px;
+        color: var(--text-dim);
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+    }
+    .stat-left .ds {
+        color: var(--text-faint);
+    }
+    .stat-left .rate {
+        font-weight: 700;
+        margin-left: 4px;
+    }
+    .ra {
+        font-size: 17px;
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
+        line-height: 1;
+    }
+
+    /* ── Footer ─────────────────────────── */
+    .footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 24px;
+        padding: 0 6px;
+        font-size: 12px;
+        color: var(--text-faint);
+        font-variant-numeric: tabular-nums;
+    }
+</style>
+</head>
+<body>
+<div class="container">
+
+    <div class="header">
+        <div>
+            <div class="player-name">{{ nickname|e }}</div>
+            <div class="player-user">@{{ username|e }}</div>
+            <div class="player-tags">
+                {% if dan %}<span class="tag dan">段位 · {{ dan|e }}</span>{% endif %}
+                {% if plate %}<span class="tag">牌子 · {{ plate|e }}</span>{% endif %}
+                <span class="tag">B50</span>
+            </div>
+        </div>
+        <div class="rating-block">
+            <div class="rating-label">Rating</div>
+            <div class="rating-value">{{ rating }}</div>
+            <div class="rating-sub">50 首单曲 Rating 之和</div>
+        </div>
+    </div>
+
+    <div class="grid">
+        {% for s in songs %}
+        <div class="card">
+            <div class="cover-wrap">
+                {% if s.cover %}
+                <img src="data:image/jpeg;base64,{{ s.cover }}" alt="">
+                {% else %}
+                <div class="cover-placeholder">♪</div>
+                {% endif %}
+                <span class="rank-badge">{{ "%02d"|format(s.rank) }}</span>
+                <span class="level-badge" style="background: {{ s.level_color }}">{{ s.level|e }}</span>
+                {% if s.badges %}
+                <div class="fc-badges">
+                    {% for b in s.badges %}
+                    <span class="fc-badge" style="color: {{ b.color }}">{{ b.text|e }}</span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            <div class="info">
+                <div class="title-row">
+                    <span class="type-mark {{ 'dx' if s.type == 'DX' else 'sd' }}">{{ s.type|e }}</span>
+                    <span class="song-title" title="{{ s.title|e }}">{{ s.title|e }}</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-left">
+                        <span class="ds">定数 {{ "%.1f"|format(s.ds) }}</span>
+                        · {{ "%.2f"|format(s.achievements) }}%
+                        <span class="rate" style="color: {{ s.rate_color }}">{{ s.rate|e }}</span>
+                    </span>
+                    <span class="ra" style="color: {{ s.ra_color }}">{{ s.ra }}</span>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="footer">
+        <span>数据来源: 水鱼查分器 diving-fish.com · B50 = 最佳 35 首 + 最近 15 首</span>
+        <span>查询耗时 {{ fetched_ms }}ms · NeoBot</span>
+    </div>
+
+</div>
+</body>
+</html>

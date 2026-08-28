@@ -62,6 +62,16 @@ api_base = "http://127.0.0.1:8699"
 # PDF 生成超时（秒），首本生成需下载全部图片
 timeout = 600
 
+# =============================================================================
+# 水鱼查分器（diving-fish）OAuth 配置（可选，maimaiDX B50 等查分功能）
+# 申请入口：https://auth.diving-fish.com/console（登记应用后生成 client_secret）
+# =============================================================================
+[divingfish]
+client_id = ""            # 水鱼开发者控制台应用 ID
+client_secret = ""        # 机密客户端凭据，仅存服务端，勿提交
+auth_base = "https://auth.diving-fish.com"                              # 授权服务器
+api_base = "https://www.diving-fish.com/api/maimaidxprober"             # 查分器 API
+
 [ehentai]
 # E-Hentai / ExHentai 画廊解析：自建 RESTful-ehentai-api 服务地址（https://github.com/bandcomic/RESTful-ehentai-api）
 api_base = "http://127.0.0.1:8677"
