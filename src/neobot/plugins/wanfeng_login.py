@@ -21,11 +21,21 @@ PASSPHRASE = "我是晚风人"
 @platform_command(["qq"], "登录")
 async def handle_wanfeng_login(bot, event, args: list[str]):
     """
-    处理「/登录 我是晚风人」：验证口令 + 群限制，成功后打晚风标识。
+    处理「/登录」：
+    - 私聊：委托 mcc 插件签发网页登录密钥（bot.wanfeng.cyou 控制台登录）
+    - 指定群（854312725）：验证口令「/登录 我是晚风人」打晚风标识
+    - 其他群：静默忽略
     """
+    # 0. 私聊 → 网页登录密钥签发（历史指令兼容：前端引导用户私聊发送「/登录」）
+    if getattr(event, "message_type", None) == "private":
+        from neobot.plugins.mcc import _do_login
+
+        await _do_login(bot, event)
+        return
+
     # 1. 仅限指定群
     if event.group_id != ALLOWED_GROUP_ID:
-        return  # 其他群/私聊静默忽略，不响应
+        return  # 其他群静默忽略，不响应
 
     # 2. 校验口令
     text = " ".join(args).strip()
