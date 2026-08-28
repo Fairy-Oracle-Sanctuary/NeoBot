@@ -171,21 +171,23 @@ async def _download_cover_b64(song_id: Any) -> str:
 
 
 async def get_cover_b64(song_id: Any) -> str:
-    """带 Redis 缓存的封面 base64（已压缩）。失败返回空串, 由模板显示占位。"""
+    """带 Redis 缓存的封面 base64（已压缩）。失败返回空串, 由模板显示占位。
+
+    ⚠️ redis_manager.redis 是 redis.asyncio 客户端，必须走 await redis_manager.get/set，
+    不能同步调用 client.get()（协程对象恒为真，会把协程 repr 当缓存值）。
+    """
     key = _REDIS_KEY.format(song_id=int(song_id))
-    client = None
     try:
-        client = redis_manager.redis
-        cached = client.get(key)  # type: ignore[no-any-return]
+        cached = await redis_manager.get(key)
         if cached:
-            return cached.decode() if isinstance(cached, bytes) else str(cached)
+            return cached
     except Exception as e:
         logger.warning(f"封面缓存读取失败: {e}")
 
     b64 = await _download_cover_b64(song_id)
-    if b64 and client is not None:
+    if b64:
         try:
-            client.set(key, b64, ex=COVER_TTL)
+            await redis_manager.set(key, b64, ex=COVER_TTL)
         except Exception as e:
             logger.warning(f"封面缓存写入失败: {e}")
     return b64
