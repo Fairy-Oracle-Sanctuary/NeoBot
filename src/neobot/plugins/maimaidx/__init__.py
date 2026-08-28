@@ -71,37 +71,39 @@ def _extract_at_qq(event: MessageEvent, raw: str) -> Optional[str]:
 
 # ── 渲染 ────────────────────────────────────────────────────────
 
-async def _render_b50(event: MessageEvent, data: dict, songs: list, approx: bool = False) -> None:
-    """拉封面 + 渲染图片回复；图片失败回退文本。"""
+async def _render_b50(event: MessageEvent, data: dict, groups: dict, approx: bool = False) -> None:
+    """拉封面 + 渲染图片回复（B35/B15 分区）；图片失败回退文本。"""
     start = time.time()
+    b35, b15 = groups.get("b35", []), groups.get("b15", [])
     try:
-        covers = await fetch_covers_b64([s["song_id"] for s in songs])
+        covers = await fetch_covers_b64([s["song_id"] for s in b35 + b15])
     except Exception as e:
         logger.warning(f"[b50] cover fetch failed: {e}")
         covers = {}
-    for s in songs:
+    for s in b35 + b15:
         s["cover"] = covers.get(s["song_id"], "")
 
     fetched_ms = int((time.time() - start) * 1000)
 
     template_data = {
         "width": 1360,
-        "height": 3600,
+        "height": 3800,
         "nickname": data.get("nickname", data.get("username", "")),
         "username": data.get("username", ""),
         "rating": data.get("rating", 0),
         "plate": data.get("plate", "") or "",
         "dan": dan_name(data.get("additional_rating")),
-        "songs": songs,
+        "songs_b35": b35,
+        "songs_b15": b15,
         "fetched_ms": fetched_ms,
         "approx": approx,
-        "total_ra": sum(s["ra"] for s in songs),
+        "total_ra": sum(s["ra"] for s in b35 + b15),
     }
 
     try:
         base64_image = await image_manager.render_template_to_base64(
             "maimaidx_b50.html", template_data, output_name="maimaidx_b50.png",
-            width=1360, height=3600,
+            width=1360, height=3800,
         )
         if base64_image:
             await event.reply(MessageSegment.image(base64_image))
@@ -113,24 +115,29 @@ async def _render_b50(event: MessageEvent, data: dict, songs: list, approx: bool
         raise RuntimeError("image generation returned empty result")
     except Exception as img_err:
         logger.error(f"[b50] image generation failed: {img_err}")
-        await event.reply(_build_text_fallback(data, songs, approx))
+        await event.reply(_build_text_fallback(data, groups, approx))
         return
 
 
-def _build_text_fallback(data: dict, songs: list, approx: bool) -> str:
+def _build_text_fallback(data: dict, groups: dict, approx: bool) -> str:
     label = "Best50(近似)" if approx else "B50"
     lines = [
         f"🎵 {data.get('nickname', '')} ({data.get('username', '')})  {label} Rating: {data.get('rating', 0)}",
         f"📛 段位: {dan_name(data.get('additional_rating')) or '未取得'}  |  牌子: {data.get('plate') or '无'}",
         "",
     ]
-    for s in songs[:20]:
+    b35, b15 = groups.get("b35", []), groups.get("b15", [])
+    lines.append(f"── B35 · 旧版本曲目最佳 {len(b35)} 首 ──")
+    for s in b35[:15]:
         lines.append(
-            f"{s['rank']:>2}. {s['title'][:24]}  "
-            f"[{s['level']}] {s['achievements']:.2f}%  ra {s['ra']}"
+            f"{s['rank']:>2}. {s['title'][:24]}  [{s['level']}] {s['achievements']:.2f}%  ra {s['ra']}"
         )
-    if len(songs) > 20:
-        lines.append(f"... 共 {len(songs)} 首")
+    if b15:
+        lines.append(f"── B15 · 新版本曲目最佳 {len(b15)} 首 ──")
+        for s in b15[:15]:
+            lines.append(
+                f"{s['rank']:>2}. {s['title'][:24]}  [{s['level']}] {s['achievements']:.2f}%  ra {s['ra']}"
+            )
     lines.append("")
     lines.append("📊 数据来源: 水鱼查分器 (diving-fish.com)")
     return "\n".join(lines)
@@ -156,16 +163,16 @@ async def _query_and_render(event: MessageEvent, raw: str, identifier: dict, app
         return
 
     try:
-        songs = build_song_list(data)
+        groups = build_song_list(data)
     except Exception:
         logger.exception(f"[b50] parse failed user={raw}")
         await event.reply("❌ 成绩数据解析失败，请稍后重试。")
         return
-    if not songs:
+    if not groups.get("b35") and not groups.get("b15"):
         await event.reply("❌ 该玩家暂无成绩记录。")
         return
 
-    await _render_b50(event, data, songs, approx=approx)
+    await _render_b50(event, data, groups, approx=approx)
 
 
 @platform_command(["qq", "discord"], "b50")
@@ -221,11 +228,11 @@ async def b50_handler(bot: Bot, event: MessageEvent, args: List[str]):
         try:
             records = await fetch_full_records(qq)
             if records:
-                songs = build_best50(records.get("records", []))
-                if not songs:
+                best = build_best50(records.get("records", []))
+                if not best:
                     await event.reply("❌ 该玩家暂无成绩记录。")
                     return
-                await _render_b50(event, records, songs, approx=True)
+                await _render_b50(event, records, {"b35": best, "b15": []}, approx=True)
                 return
         except OAuthNotConfigured:
             pass

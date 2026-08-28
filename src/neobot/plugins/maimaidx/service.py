@@ -211,10 +211,16 @@ async def fetch_covers_b64(song_ids: List[Any]) -> Dict[int, str]:
     return dict(results)
 
 
-def build_song_list(data: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """charts.dx + charts.sd 合并, 按 ra 降序, 附展示字段"""
-    songs = data.get("charts", {}).get("dx", []) + data.get("charts", {}).get("sd", [])
-    return _decorate_songs(songs)
+def build_song_list(data: Dict[str, Any]) -> Dict[str, List[Dict[str, Any]]]:
+    """B50 → {b35, b15} 分区展示。
+
+    水鱼 /query/player 约定: charts.sd = B35（旧版本曲目最佳 35 首）,
+    charts.dx = B15（当前版本及新版本曲目最佳 15 首）。
+    查分器无游玩时间戳, 以歌曲版本近似游戏内的 Recent15。
+    """
+    b35 = _decorate_songs(data.get("charts", {}).get("sd", []))
+    b15 = _decorate_songs(data.get("charts", {}).get("dx", []))
+    return {"b35": b35, "b15": b15}
 
 
 def build_best50(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

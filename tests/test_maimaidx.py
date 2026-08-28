@@ -25,23 +25,28 @@ def _chart(**overrides):
 # ── build_song_list ─────────────────────────────────────────────
 
 def test_build_song_list_sorted_by_ra_desc():
-    """dx+sd 合并后按 ra 降序，rank 从 1 开始。"""
+    """sd 组→b35、dx 组→b15，各组按 ra 降序，rank 各自从 1 开始。"""
     data = {
         "charts": {
             "dx": [_chart(song_id=1, ra=300, title="A"), _chart(song_id=2, ra=310, title="B")],
-            "sd": [_chart(song_id=3, ra=280, title="C", type="SD")],
+            "sd": [_chart(song_id=3, ra=280, title="C", type="SD"), _chart(song_id=4, ra=330, title="D")],
         }
     }
-    songs = build_song_list(data)
-    assert [s["ra"] for s in songs] == [310, 300, 280]
-    assert [s["rank"] for s in songs] == [1, 2, 3]
-    assert songs[0]["title"] == "B"
-    assert songs[0]["song_id"] == 2
+    groups = build_song_list(data)
+    assert list(groups.keys()) == ["b35", "b15"]
+    b35 = groups["b35"]
+    b15 = groups["b15"]
+    assert [s["ra"] for s in b35] == [330, 280]
+    assert [s["ra"] for s in b15] == [310, 300]
+    assert [s["rank"] for s in b35] == [1, 2]
+    assert [s["rank"] for s in b15] == [1, 2]
+    assert b35[0]["title"] == "D"
+    assert b15[0]["title"] == "B"
 
 
 def test_build_song_list_fields():
     """展示字段完整：song_id/level_color/ra_color/rate 大写/type。"""
-    s = build_song_list({"charts": {"dx": [_chart()], "sd": []}})[0]
+    s = build_song_list({"charts": {"dx": [_chart()], "sd": []}})["b15"][0]
     assert s["song_id"] == 11741
     assert s["rate"] == "SSSP"
     assert s["type"] == "DX"
@@ -54,21 +59,21 @@ def test_build_song_list_fields():
 def test_build_song_list_fc_fs_badges():
     """fc/fs 徽章合并；fcp 显示 FC+；fsd 显示 FSD；空状态无徽章。"""
     data = {"charts": {"dx": [_chart(fc="fcp", fs="fsd")], "sd": []}}
-    badges = build_song_list(data)[0]["badges"]
+    badges = build_song_list(data)["b15"][0]["badges"]
     texts = [b["text"] for b in badges]
     assert texts == ["FC+", "FSD"]
     assert badges[0]["color"] == FC_COLORS["fcp"]
 
     data = {"charts": {"dx": [_chart(fc="", fs="")], "sd": []}}
-    assert build_song_list(data)[0]["badges"] == []
+    assert build_song_list(data)["b15"][0]["badges"] == []
 
     data = {"charts": {"dx": [_chart(fc="ap", fs="fsdp")], "sd": []}}
-    texts = [b["text"] for b in build_song_list(data)[0]["badges"]]
+    texts = [b["text"] for b in build_song_list(data)["b15"][0]["badges"]]
     assert texts == ["AP", "FSD+"]
 
 
 def test_build_song_list_empty():
-    assert build_song_list({"charts": {"dx": [], "sd": []}}) == []
+    assert build_song_list({"charts": {"dx": [], "sd": []}}) == {"b35": [], "b15": []}
 
 
 def test_build_best50_takes_top50_sorted():

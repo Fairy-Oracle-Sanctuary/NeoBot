@@ -128,7 +128,40 @@
         font-variant-numeric: tabular-nums;
     }
 
-    /* ── Grid ───────────────────────────── */
+    /* ── Section headers ─────────────────────── */
+    .section-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        margin: 30px 6px 14px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+    }
+    .section-header:first-of-type {
+        margin-top: 0;
+    }
+    .section-title {
+        font-size: 19px;
+        font-weight: 700;
+        letter-spacing: 1px;
+        color: var(--text);
+    }
+    .section-title .en {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-faint);
+        letter-spacing: 2px;
+        margin-left: 10px;
+        text-transform: uppercase;
+    }
+    .section-sub {
+        font-size: 12px;
+        color: var(--text-faint);
+    }
+    .section-header.b35 .section-title { color: #ffd9a0; }
+    .section-header.b15 .section-title { color: #8fd8e8; }
+
+    /* ── Grid ───────────────────────────────── */
     .grid {
         display: grid;
         grid-template-columns: repeat(5, 240px);
@@ -301,8 +334,13 @@
         </div>
     </div>
 
+    <div class="section-header b35">
+        <div class="section-title">B35<span class="en">Best 35 · 旧版本曲目</span></div>
+        <div class="section-sub">{{ songs_b35|length }} 首 · 按单曲 Rating</div>
+    </div>
+
     <div class="grid">
-        {% for s in songs %}
+        {% for s in songs_b35 %}
         <div class="card">
             <div class="cover-wrap">
                 {% if s.cover %}
@@ -337,6 +375,50 @@
         </div>
         {% endfor %}
     </div>
+
+    {% if songs_b15 %}
+    <div class="section-header b15">
+        <div class="section-title">B15<span class="en">Recent 15 · 新版本曲目</span></div>
+        <div class="section-sub">{{ songs_b15|length }} 首 · 按单曲 Rating</div>
+    </div>
+
+    <div class="grid">
+        {% for s in songs_b15 %}
+        <div class="card">
+            <div class="cover-wrap">
+                {% if s.cover %}
+                <img src="data:image/jpeg;base64,{{ s.cover }}" alt="">
+                {% else %}
+                <div class="cover-placeholder">♪</div>
+                {% endif %}
+                <span class="rank-badge">{{ "%02d"|format(s.rank) }}</span>
+                <span class="level-badge" style="background: {{ s.level_color }}">{{ s.level|e }}</span>
+                {% if s.badges %}
+                <div class="fc-badges">
+                    {% for b in s.badges %}
+                    <span class="fc-badge" style="color: {{ b.color }}">{{ b.text|e }}</span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            <div class="info">
+                <div class="title-row">
+                    <span class="type-mark {{ 'dx' if s.type == 'DX' else 'sd' }}">{{ s.type|e }}</span>
+                    <span class="song-title" title="{{ s.title|e }}">{{ s.title|e }}</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-left">
+                        <span class="ds">定数 {{ "%.1f"|format(s.ds) }}</span>
+                        · {{ "%.2f"|format(s.achievements) }}%
+                        <span class="rate" style="color: {{ s.rate_color }}">{{ s.rate|e }}</span>
+                    </span>
+                    <span class="ra" style="color: {{ s.ra_color }}">{{ s.ra }}</span>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
 
     <div class="footer">
         <span>数据来源: 水鱼查分器 diving-fish.com · {% if approx %}近似 B50（无最近记录时间，按单曲 Rating 最高 50 首）{% else %}B50 = 最佳 35 首 + 最近 15 首{% endif %}</span>
