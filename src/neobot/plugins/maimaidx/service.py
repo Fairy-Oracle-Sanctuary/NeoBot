@@ -7,7 +7,7 @@ maimaiDX 水鱼查分器数据服务
 import asyncio
 import base64
 import io
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import aiohttp
 from PIL import Image
@@ -81,7 +81,6 @@ def level_color(level: Any) -> str:
     try:
         text = str(level)
         num = float(text.rstrip("+"))
-        plus = text.endswith("+")
     except (TypeError, ValueError):
         return "#607d8b"
     base = [

@@ -99,7 +99,7 @@ async def b50_handler(bot: Bot, event: MessageEvent, args: List[str]):
 
     try:
         songs = build_song_list(data)
-    except Exception as e:
+    except Exception:
         logger.exception(f"[b50] parse failed user={raw}")
         await event.reply("❌ 成绩数据解析失败，请稍后重试。")
         return
