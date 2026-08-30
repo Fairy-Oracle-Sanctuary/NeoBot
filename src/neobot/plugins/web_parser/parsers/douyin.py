@@ -816,15 +816,8 @@ class DouyinParser(BaseParser):
         text_message = "\n".join(text_parts)
         
         # 准备转发消息节点
-        nodes = []
-
-        # 添加文本信息节点
-        text_node = event.bot.build_forward_node(
-            user_id=event.self_id, 
-            nickname=self.nickname, 
-            message=text_message
-        )
-        nodes.append(text_node)
+        nodes = []        # 核心媒体节点（视频/图集图片）
+        aux_nodes = []    # 辅助图片节点（封面/头像）+ 文字节点
 
         # 添加封面图片节点（如果有）
         if data.get('cover'):
@@ -842,7 +835,7 @@ class DouyinParser(BaseParser):
                         MessageSegment.image(cover_url)
                     ]
                 )
-                nodes.append(cover_node)
+                aux_nodes.append(cover_node)
             except Exception as e:
                 logger.warning(f"[{self.name}] 无法添加封面图片: {e}")
 
@@ -862,7 +855,7 @@ class DouyinParser(BaseParser):
                         MessageSegment.image(avatar_url)
                     ]
                 )
-                nodes.append(avatar_node)
+                aux_nodes.append(avatar_node)
             except Exception as e:
                 logger.warning(f"[{self.name}] 无法添加作者头像: {e}")
 
@@ -998,8 +991,18 @@ class DouyinParser(BaseParser):
                 nickname=self.nickname,
                 message="解析成功，但无法获取媒体直链。"
             )
-            nodes.append(no_media_node)
+            aux_nodes.append(no_media_node)
 
+        # 文字信息节点放最后
+        text_node = event.bot.build_forward_node(
+            user_id=event.self_id,
+            nickname=self.nickname,
+            message=text_message
+        )
+        aux_nodes.append(text_node)
+
+        # 顺序：核心媒体（视频/图集）→ 辅助图片（封面/头像）→ 文字
+        nodes.extend(aux_nodes)
         return nodes
     
     def should_handle_url(self, url: str) -> bool:

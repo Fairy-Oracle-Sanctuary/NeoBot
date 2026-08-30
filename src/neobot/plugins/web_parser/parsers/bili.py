@@ -669,12 +669,19 @@ class BiliParser(BaseParser):
             MessageSegment.image(data['owner_avatar'])
         ]
 
+        # 媒体节点放前面（封面、头像、视频），文字信息放最后
         nodes = [
-            event.bot.build_forward_node(user_id=event.self_id, nickname=self.nickname, message=text_message),
             event.bot.build_forward_node(user_id=event.self_id, nickname=self.nickname, message=image_message_segment),
-            event.bot.build_forward_node(user_id=event.self_id, nickname=self.nickname, message=up_info_segment),
-            event.bot.build_forward_node(user_id=event.self_id, nickname=self.nickname, message=video_message)
+            event.bot.build_forward_node(user_id=event.self_id, nickname=self.nickname, message=up_info_segment)
         ]
+        # 视频/失败提示节点：视频是媒体放最前，纯文字提示放最后（文字区）
+        video_node = event.bot.build_forward_node(user_id=event.self_id, nickname=self.nickname, message=video_message)
+        if isinstance(video_message, MessageSegment):
+            nodes.insert(0, video_node)
+        else:
+            nodes.append(video_node)
+        # 文字信息节点最后
+        nodes.append(event.bot.build_forward_node(user_id=event.self_id, nickname=self.nickname, message=text_message))
 
         # 媒体只在合并转发内展示，不单独直接发
         return nodes

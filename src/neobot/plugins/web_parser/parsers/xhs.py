@@ -186,12 +186,6 @@ class XhsParser(BaseParser):
         text_message = "\n".join(text_parts)
 
         nodes = []
-        text_node = event.bot.build_forward_node(
-            user_id=event.self_id,
-            nickname=self.nickname,
-            message=text_message,
-        )
-        nodes.append(text_node)
 
         media_success = False
 
@@ -238,6 +232,14 @@ class XhsParser(BaseParser):
                 message="解析成功，但无法获取媒体直链。",
             )
             nodes.append(no_media_node)
+
+        # 文字信息节点放最后
+        text_node = event.bot.build_forward_node(
+            user_id=event.self_id,
+            nickname=self.nickname,
+            message=text_message,
+        )
+        nodes.append(text_node)
 
         return nodes
 
