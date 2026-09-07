@@ -9,6 +9,7 @@ import importlib
 import os
 import pkgutil
 import sys
+import time
 from typing import List, Set, Tuple
 
 from .command_manager import CommandManager
@@ -30,6 +31,9 @@ class PluginManager(Singleton):
     """
     插件管理器类
     """
+    #: 慢插件告警阈值(秒)
+    SLOW_PLUGIN_THRESHOLD = 0.2
+
     def __init__(self, command_manager: "CommandManager" | None = None) -> None:
         """
         初始化插件管理器
@@ -48,6 +52,8 @@ class PluginManager(Singleton):
         self.loaded_plugins: Set[str] = set()
         # 旧式插件直接 import 内部模块的聚合记录 [(模块名, [违规模块...]), ...]
         self._legacy_import_violations: List[Tuple[str, List[str]]] = []
+        # 插件加载耗时记录 [(模块名, 耗时秒)]，加载完成后汇总输出，慢插件告警
+        self._load_timings: List[Tuple[str, float]] = []
 
         if command_manager:
             self._command_manager = command_manager
@@ -138,15 +144,21 @@ class PluginManager(Singleton):
         # 使用完整的包名：neobot.plugins
         package_name = "neobot.plugins"
 
+        # 无论后续是否提前 return,都先重置耗时记录,避免单例残留上次运行的旧数据
+        self._load_timings = []
+
         if not os.path.exists(plugin_dir):
             self.logger.error(f"插件目录不存在：{plugin_dir}")
             return
 
         self.logger.info(f"正在从 {package_name} 加载插件 (路径：{plugin_dir})...")
 
+        total_start = time.perf_counter()
+
         for _, module_name, is_pkg in pkgutil.iter_modules([plugin_dir]):
             full_module_name = f"{package_name}.{module_name}"
 
+            plugin_start = time.perf_counter()
             action = "加载"  # 初始化默认值
             try:
                 if full_module_name in self.loaded_plugins:
@@ -163,7 +175,11 @@ class PluginManager(Singleton):
                 self.loaded_plugins.add(full_module_name)
 
                 type_str = "包" if is_pkg else "文件"
-                self.logger.success(f"   [{type_str}] 成功{action}: {module_name}")
+                elapsed = time.perf_counter() - plugin_start
+                self._load_timings.append((full_module_name, elapsed))
+                self.logger.success(
+                    f"   [{type_str}] 成功{action}: {module_name} (耗时 {elapsed * 1000:.0f}ms)"
+                )
             except SyncHandlerError as e:
                 error = PluginLoadError(
                     plugin_name=module_name,
@@ -196,6 +212,21 @@ class PluginManager(Singleton):
                 self.logger.log_custom_exception(error)
 
         self._log_legacy_violations()
+        self._log_slow_plugins(total_elapsed=time.perf_counter() - total_start)
+
+    def _log_slow_plugins(self, total_elapsed: float) -> None:
+        """加载完成后输出总耗时；超过阈值的慢插件逐条告警。"""
+        self.logger.info(f"插件加载完成：共 {len(self._load_timings)} 个成功，总耗时 {total_elapsed:.2f}s")
+        if not self._load_timings:
+            return
+        slow = [(name, elapsed) for name, elapsed in self._load_timings if elapsed >= self.SLOW_PLUGIN_THRESHOLD]
+        if not slow:
+            return
+        slow.sort(key=lambda x: -x[1])
+        detail = ", ".join(f"{name} {elapsed * 1000:.0f}ms" for name, elapsed in slow)
+        self.logger.warning(
+            f"{len(slow)} 个插件加载耗时超过 {self.SLOW_PLUGIN_THRESHOLD:.2f}s，可能拖慢启动: {detail}"
+        )
 
     def reload_plugin(self, full_module_name: str) -> None:
         """
