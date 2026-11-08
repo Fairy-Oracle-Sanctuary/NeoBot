@@ -1,6 +1,8 @@
 """
 输入验证器测试
 """
+import ipaddress
+
 import pytest
 
 from neobot.core.utils.input_validator import InputValidator, input_validator
@@ -350,6 +352,75 @@ class TestInputValidator:
         # 测试全局实例的功能
         result = input_validator.validate_sql_input("正常输入")
         assert result is True
+
+
+class TestHttpUrlSsrfProtection:
+    """validate_http_url 的 SSRF 防护测试"""
+
+    def setup_method(self):
+        self.validator = InputValidator()
+
+    def test_public_url_allowed(self):
+        """公网 URL 应放行（resolve=False 以免测试依赖 DNS）"""
+        for url in (
+            "https://example.com/image.jpg",
+            "http://cdn.example.com:8080/a/b?c=1",
+        ):
+            assert self.validator.validate_http_url(url, resolve=False) is True
+
+    def test_literal_private_ip_rejected(self):
+        """字面量内网 / 回环 / 链路本地地址一律拒绝"""
+        for url in (
+            "http://127.0.0.1:3003/health",
+            "http://10.0.0.5:6379/",
+            "http://192.168.1.1/",
+            "http://172.16.0.1/",
+            "http://169.254.169.254/latest/meta-data/",
+            "http://[::1]:6099/webui",
+            "http://localhost:3003/health",
+        ):
+            assert self.validator.validate_http_url(url) is False, url
+
+    def test_non_canonical_ip_rejected(self):
+        """
+        127.1 / 2130706433 / 0x7f000001 这类写法无法被 ipaddress 解析，
+        但系统解析器会当成 127.0.0.1，必须拒绝。
+        """
+        for url in (
+            "http://127.1:6099/webui",
+            "http://2130706433/",
+            "http://0x7f000001/",
+            "http://0177.0.0.1/",
+        ):
+            assert self.validator.validate_http_url(url) is False, url
+
+    def test_domain_resolving_to_private_ip_rejected(self, monkeypatch):
+        """域名解析到内网时应拒绝（防 DNS rebinding / 指向内网的域名）"""
+        monkeypatch.setattr(
+            InputValidator,
+            "_resolve_host",
+            staticmethod(lambda host: [ipaddress.ip_address("10.1.2.3")]),
+        )
+        assert self.validator.validate_http_url("http://evil.example.com/a.jpg") is False
+
+    def test_domain_resolving_to_public_ip_allowed(self, monkeypatch):
+        """域名解析到公网地址时放行"""
+        monkeypatch.setattr(
+            InputValidator,
+            "_resolve_host",
+            staticmethod(lambda host: [ipaddress.ip_address("93.184.216.34")]),
+        )
+        assert self.validator.validate_http_url("http://cdn.example.com/a.jpg") is True
+
+    def test_dns_failure_does_not_block(self, monkeypatch):
+        """解析失败（临时 DNS 故障）时不阻断，交给后续请求自己失败"""
+        monkeypatch.setattr(InputValidator, "_resolve_host", staticmethod(lambda host: []))
+        assert self.validator.validate_http_url("http://cdn.example.com/a.jpg") is True
+
+    def test_unsupported_scheme_rejected(self):
+        """非 http/https 协议拒绝"""
+        for url in ("file:///etc/passwd", "gopher://127.0.0.1:6379/_INFO", "ftp://example.com/a"):
+            assert self.validator.validate_http_url(url) is False, url
 
 
 if __name__ == "__main__":

@@ -86,8 +86,12 @@ class PluginReloadHandler(FileSystemEventHandler):
         self.last_reload_time = current_time
         
         # 从文件路径解析出模块名
-        # 例如: C:\path\to\project\src\neobot\plugins\bili_parser.py -> neobot.plugins.bili_parser
-        relative_path = os.path.relpath(src_path, ROOT_DIR)
+        # 注意：这里必须以 SRC_DIR 为基准，而不是项目根目录 ROOT_DIR。
+        # 插件是按 `neobot.plugins.x` 的名字导入的（sys.path 里放的是 src），
+        # 若以 ROOT_DIR 为基准会得到 `src.neobot.plugins.x`，与 sys.modules 中的键
+        # 对不上，reload_plugin 会一直报「模块未在sys.modules中找到」。
+        # 例如: /app/src/neobot/plugins/bili_parser.py -> neobot.plugins.bili_parser
+        relative_path = os.path.relpath(src_path, SRC_DIR)
         module_name = os.path.splitext(relative_path.replace(os.sep, '.'))[0]
 
         logger.info(f"检测到文件变更: {src_path}")
