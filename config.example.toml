@@ -97,9 +97,12 @@ token = ""
 enabled = false
 
 [logging]
+# 长期运行时建议用 INFO：DEBUG 会把每条消息、每个事件都写进文件，磁盘增长很快
 level = "DEBUG"
 file_level = "DEBUG"
 console_level = "INFO"
+# 日志文件保留天数，超过后由 loguru 自动删除
+retention_days = 7
 
 [mcc_adapter]
 enabled = false

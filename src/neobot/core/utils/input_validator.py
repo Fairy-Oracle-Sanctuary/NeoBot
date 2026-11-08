@@ -6,10 +6,27 @@
 import re
 import html
 import ipaddress
+import socket
 from typing import Optional, List, Dict
 from urllib.parse import urlparse
 
 from .logger import ModuleLogger
+
+# 老式/非规范 IPv4 写法：127.1 / 2130706433 / 0x7f000001 / 0177.0.0.1
+# 这类字符串不是合法域名（顶级域不可能是纯数字），但 glibc 的 getaddrinfo 会把它
+# 当成 IPv4 解析，从而绕过基于 ipaddress 的内网判断，必须整体拒绝。
+_AMBIGUOUS_NUMERIC_HOST = re.compile(
+    r"^(?:0x[0-9a-f]+|\d+)(?:\.(?:0x[0-9a-f]+|\d+))*$",
+    re.IGNORECASE,
+)
+
+# 保留主机名
+_RESERVED_HOSTNAMES = frozenset({
+    "localhost",
+    "localhost.localdomain",
+    "ip6-localhost",
+    "ip6-loopback",
+})
 
 
 class InputValidator:
@@ -227,35 +244,89 @@ class InputValidator:
             self.logger.error(f"URL 解析失败: {e}")
             return False
 
-    def _is_private_or_loopback_host(self, hostname: str) -> bool:
+    @staticmethod
+    def _is_unsafe_address(address: ipaddress._BaseAddress) -> bool:
+        """判断单个 IP 是否属于内网 / 回环 / 链路本地等不应请求的地址。"""
+        return (
+            address.is_private
+            or address.is_loopback
+            or address.is_link_local
+            or address.is_reserved
+            or address.is_multicast
+            or address.is_unspecified
+        )
+
+    @staticmethod
+    def _resolve_host(hostname: str) -> List[ipaddress._BaseAddress]:
+        """
+        解析域名，返回其全部 IP（A/AAAA）。
+
+        解析失败时返回空列表：此时不阻断请求，让后续 HTTP 请求自己去失败，
+        避免 DNS 临时故障把正常解析功能一起打死。
+        """
+        try:
+            infos = socket.getaddrinfo(hostname, None)
+        except (socket.gaierror, UnicodeError):
+            return []
+
+        addresses: List[ipaddress._BaseAddress] = []
+        for info in infos:
+            # info[4][0] 是 sockaddr 的地址部分；IPv6 可能带 %scope 后缀
+            raw_address = str(info[4][0]).split("%", 1)[0]
+            try:
+                addresses.append(ipaddress.ip_address(raw_address))
+            except ValueError:
+                continue
+        return addresses
+
+    def _is_private_or_loopback_host(self, hostname: str, resolve: bool = True) -> bool:
         """
         判断主机名是否指向内网 / 回环 / 链路本地地址，用于 SSRF 防护。
-        仅拦截字面量 IP 与保留主机名（localhost），域名无法在此解析判定。
+
+        除了字面量 IP 与保留主机名，还会：
+        - 拒绝 127.1 / 2130706433 / 0x7f000001 这类会被 glibc 当成 IP 解析的非规范写法
+        - 解析域名的全部 A/AAAA 记录，任一落到内网即判定不安全（防 DNS rebinding /
+          指向内网的域名）
+
+        Args:
+            hostname: 待校验主机名
+            resolve: 是否解析域名（False 时只做字面量与格式判断，不产生 DNS 查询）
         """
         host = (hostname or "").strip().lower().rstrip(".")
         if not host:
             return True
-        # 保留主机名
-        if host in ("localhost", "localhost.localdomain", "ip6-localhost", "ip6-loopback"):
+        if host in _RESERVED_HOSTNAMES:
             return True
-        # 尝试按 IP 字面量解析
-        try:
-            addr = ipaddress.ip_address(host)
-        except ValueError:
-            return False
-        return (addr.is_private or addr.is_loopback or addr.is_link_local
-                or addr.is_reserved or addr.is_multicast or addr.is_unspecified)
 
-    def validate_http_url(self, url: str, allow_private: bool = False) -> bool:
+        try:
+            return self._is_unsafe_address(ipaddress.ip_address(host))
+        except ValueError:
+            pass
+
+        # 非规范 IPv4 写法：无法按 ipaddress 解析，但系统解析器会认，直接拒绝
+        if _AMBIGUOUS_NUMERIC_HOST.match(host):
+            return True
+
+        if not resolve:
+            return False
+
+        return any(self._is_unsafe_address(address) for address in self._resolve_host(host))
+
+    def validate_http_url(self, url: str, allow_private: bool = False, resolve: bool = True) -> bool:
         """
         验证 URL 是否可安全发起 HTTP 请求（SSRF 防护）。
 
         仅允许 http/https 协议，且默认拒绝指向内网 / 回环 / 链路本地的地址
         （127.x、10.x、172.16-31.x、192.168.x、169.254.x、::1、fe80:: 等）。
+        域名会被解析后逐 IP 校验，防 DNS rebinding 与「域名指向内网」的绕过。
+
+        注意：这里的 DNS 解析是同步的（单次通常 < 50ms）。调用方若是异步上下文，
+        请把校验放在请求之前的普通路径上，不要在高频热路径里反复调用。
 
         Args:
             url: 目标 URL
             allow_private: 是否允许内网地址（默认 False）
+            resolve: 是否解析域名做二级校验（默认 True；纯字面量场景可关掉以免 DNS 开销）
 
         Returns:
             bool: 是否安全
@@ -273,7 +344,7 @@ class InputValidator:
         if not parsed.hostname:
             self.logger.warning("SSRF 防护: URL 缺少主机名")
             return False
-        if not allow_private and self._is_private_or_loopback_host(parsed.hostname):
+        if not allow_private and self._is_private_or_loopback_host(parsed.hostname, resolve=resolve):
             self.logger.warning(f"SSRF 防护: 拒绝内网/回环地址 {parsed.hostname!r}: {url[:200]}")
             return False
         return True

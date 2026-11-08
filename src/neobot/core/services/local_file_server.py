@@ -8,10 +8,11 @@
 
 import asyncio
 import tempfile
-import hashlib
+import secrets
 import time
 from pathlib import Path
 from typing import Optional, Dict
+from urllib.parse import urljoin
 import aiohttp
 from aiohttp import web
 
@@ -23,6 +24,10 @@ from neobot.core.utils.input_validator import input_validator
 FILE_MAX_AGE_SECONDS = 24 * 3600  # 24 小时
 # 定时清理间隔
 CLEANUP_INTERVAL_SECONDS = 3600  # 每小时
+# 单文件下载大小上限：防止一个超大链接把磁盘写满
+MAX_DOWNLOAD_BYTES = 200 * 1024 * 1024  # 200 MB
+# 允许的最大重定向跳数（每一跳都会重新做 SSRF 校验）
+MAX_REDIRECTS = 3
 
 
 class LocalFileServer:
@@ -58,6 +63,8 @@ class LocalFileServer:
         
         # 文件映射表：file_id -> file_path
         self.file_map: Dict[str, Path] = {}
+        # URL -> file_id，用于同一 URL 重复下载时复用同一个文件
+        self._url_to_id: Dict[str, str] = {}
 
         # 定时清理过期下载文件的后台任务
         self._cleanup_task: Optional[asyncio.Task] = None
@@ -137,13 +144,28 @@ class LocalFileServer:
                     logger.warning(f"[LocalFileServer] 删除孤儿文件失败 {file_path}: {e}")
                 removed += 1
 
+        # 清理已失效的 URL -> file_id 映射，避免长期运行后无限增长
+        for cached_url, cached_id in list(self._url_to_id.items()):
+            if cached_id not in self.file_map:
+                del self._url_to_id[cached_url]
+
         if removed:
             logger.info(f"[LocalFileServer] 已清理 {removed} 个过期下载文件")
 
     def _generate_file_id(self, url: str) -> str:
-        """根据 URL 生成唯一的文件 ID"""
-        url_hash = hashlib.md5(url.encode()).hexdigest()[:16]
-        return f"file_{url_hash}"
+        """
+        生成文件 ID。
+
+        同一 URL 复用同一个 ID（便于去重）；不同 URL 使用不可预测的随机 ID，
+        避免通过 md5(url) 猜出他人文件的下载地址。
+        """
+        cached_id = self._url_to_id.get(url)
+        if cached_id:
+            return cached_id
+
+        file_id = f"file_{secrets.token_urlsafe(16)}"
+        self._url_to_id[url] = file_id
+        return file_id
     
     async def download_file(self, url: str, timeout: int = 60, headers: Optional[Dict[str, str]] = None) -> Optional[str]:
         """
@@ -176,17 +198,39 @@ class LocalFileServer:
             # 使用 aiohttp 下载文件；trust_env=True 让下载走系统代理环境变量
             # （neobot 服务通过 systemd 注入 http_proxy/https_proxy 指向 mihomo）
             async with aiohttp.ClientSession(trust_env=True) as session:
-                async with session.get(url, timeout=timeout, headers=headers) as response:
+                response, error = await self._open_with_validation(session, url, timeout, headers)
+                if response is None:
+                    if error:
+                        logger.error(f"[LocalFileServer] 下载失败: {error}")
+                    return None
+
+                async with response:
                     if response.status != 200:
                         logger.error(f"[LocalFileServer] 下载失败: HTTP {response.status}")
                         return None
-                    
+
+                    # 先看 Content-Length，避免为一个超大文件白下载半天
+                    content_length = response.headers.get("Content-Length", "")
+                    if content_length.isdigit() and int(content_length) > MAX_DOWNLOAD_BYTES:
+                        logger.warning(
+                            f"[LocalFileServer] 拒绝下载超大文件: {content_length} 字节"
+                            f"（上限 {MAX_DOWNLOAD_BYTES}）"
+                        )
+                        return None
+
                     # 读取并保存文件
+                    written = 0
                     with open(file_path, 'wb') as f:
                         while True:
                             chunk = await response.content.read(8192)
                             if not chunk:
                                 break
+                            written += len(chunk)
+                            # 有些服务端不返回 Content-Length，这里再按实际写入量兜底
+                            if written > MAX_DOWNLOAD_BYTES:
+                                raise ValueError(
+                                    f"文件超过 {MAX_DOWNLOAD_BYTES} 字节上限，已中止下载"
+                                )
                             f.write(chunk)
             
             self.file_map[file_id] = file_path
@@ -195,7 +239,54 @@ class LocalFileServer:
             
         except Exception as e:
             logger.error(f"[LocalFileServer] 下载失败: {e}")
+            # 清理写了一半的残文件，避免占盘
+            try:
+                if 'file_path' in locals() and file_path.exists():
+                    file_path.unlink(missing_ok=True)
+            except OSError:
+                pass
             return None
+
+    async def _open_with_validation(
+        self,
+        session: aiohttp.ClientSession,
+        url: str,
+        timeout: int,
+        headers: Optional[Dict[str, str]],
+    ):
+        """
+        手动跟随重定向，并对每一跳重新做 SSRF 校验。
+
+        aiohttp 默认会自动跟随 302，若只校验初始 URL，攻击者用一个公网地址
+        302 跳到 http://127.0.0.1:xxxx 即可绕过校验。
+
+        Returns:
+            (response, error_message)：成功时 response 为未关闭的响应对象；
+            失败时 response 为 None，error_message 说明原因。
+        """
+        current_url = url
+        for _ in range(MAX_REDIRECTS + 1):
+            response = await session.get(
+                current_url,
+                timeout=timeout,
+                headers=headers,
+                allow_redirects=False,
+            )
+            if response.status not in (301, 302, 303, 307, 308):
+                return response, None
+
+            location = response.headers.get("Location")
+            response.release()
+            if not location:
+                return None, "重定向响应缺少 Location"
+
+            next_url = urljoin(current_url, location)
+            if not input_validator.validate_http_url(next_url):
+                logger.warning(f"[LocalFileServer] 拒绝重定向到不安全地址: {next_url[:200]}")
+                return None, "重定向目标不安全"
+            current_url = next_url
+
+        return None, f"重定向次数超过上限 {MAX_REDIRECTS}"
     
     async def handle_download(self, request: web.Request) -> web.Response:
         """处理文件下载请求"""

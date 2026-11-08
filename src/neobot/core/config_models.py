@@ -200,6 +200,8 @@ class LoggingModel(BaseModel):
     level: str = "DEBUG"
     file_level: str = "DEBUG"
     console_level: str = "INFO"
+    # 日志文件保留天数，超过后由 loguru 自动删除
+    retention_days: int = 7
 
 
 class McCInstanceModel(BaseModel):

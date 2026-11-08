@@ -3,6 +3,7 @@
 
 该模块负责初始化和配置 loguru 日志记录器，为整个应用程序提供统一的日志记录接口。
 """
+import os
 import sys
 from pathlib import Path
 from loguru import logger
@@ -13,6 +14,48 @@ try:
     USE_CONFIG = True
 except ImportError:
     USE_CONFIG = False
+
+# 默认日志保留天数（配置文件未指定时使用）
+DEFAULT_RETENTION_DAYS = 7
+# 环境变量覆盖项，与 config_loader 中 LOG_LEVEL 等保持同名
+_LOGGING_ENV_KEYS = (
+    ("level", "LOG_LEVEL"),
+    ("file_level", "LOG_FILE_LEVEL"),
+    ("console_level", "LOG_CONSOLE_LEVEL"),
+    ("retention_days", "LOG_RETENTION_DAYS"),
+)
+
+
+def _read_logging_config_from_file() -> dict:
+    """
+    在 config_loader 尚未初始化完成时，直接读取 config.toml 的 [logging] 配置。
+
+    背景：main.py 第一行就要导入本模块，而本模块又需要读取配置级别，此时
+    `from ..config_loader import global_config` 会因为循环导入拿到未完成的模块，
+    走到 USE_CONFIG=False 分支。原来的实现直接硬编码 DEBUG/DEBUG/INFO，导致
+    config.toml 里的 [logging] 完全失效（日志文件按 DEBUG 级别无限膨胀）。
+
+    这里不依赖任何 neobot 模块，直接解析 TOML，并沿用与 config_loader 一致的环境
+    变量覆盖优先级，保证配置在任何导入顺序下都生效。
+    """
+    try:
+        import tomllib
+    except ModuleNotFoundError:  # Python < 3.11
+        return {}
+
+    config_path = Path(os.environ.get("NEOBOT_CONFIG_FILE", "config.toml"))
+    try:
+        with open(config_path, "rb") as file:
+            raw_config = tomllib.load(file)
+    except (OSError, ValueError):
+        return {}
+
+    logging_config = dict(raw_config.get("logging") or {})
+    for key, env_name in _LOGGING_ENV_KEYS:
+        env_value = os.environ.get(env_name)
+        if env_value:
+            logging_config[key] = env_value
+    return logging_config
 
 # 定义日志格式，添加进程ID和线程ID作为上下文信息
 LOG_FORMAT = (
@@ -41,10 +84,16 @@ if USE_CONFIG:
     LOG_LEVEL = global_config.logging.level
     FILE_LEVEL = global_config.logging.file_level
     CONSOLE_LEVEL = global_config.logging.console_level
+    RETENTION_DAYS = getattr(global_config.logging, "retention_days", DEFAULT_RETENTION_DAYS)
 else:
-    LOG_LEVEL = "DEBUG"
-    FILE_LEVEL = "DEBUG"
-    CONSOLE_LEVEL = "INFO"
+    _fallback_logging = _read_logging_config_from_file()
+    LOG_LEVEL = _fallback_logging.get("level", "DEBUG")
+    FILE_LEVEL = _fallback_logging.get("file_level", LOG_LEVEL)
+    CONSOLE_LEVEL = _fallback_logging.get("console_level", "INFO")
+    try:
+        RETENTION_DAYS = int(_fallback_logging.get("retention_days", DEFAULT_RETENTION_DAYS))
+    except (TypeError, ValueError):
+        RETENTION_DAYS = DEFAULT_RETENTION_DAYS
 
 # 添加控制台输出处理器
 logger.add(
@@ -67,7 +116,7 @@ logger.add(
     format=DEBUG_LOG_FORMAT,
     colorize=False,
     rotation="00:00",  # 每天午夜创建新文件
-    retention="7 days",  # 保留最近 7 天的日志
+    retention=f"{RETENTION_DAYS} days",  # 保留最近 N 天日志，由 [logging] retention_days 控制
     encoding="utf-8",
     enqueue=True,  # 异步写入
     backtrace=True,  # 记录完整的异常堆栈
