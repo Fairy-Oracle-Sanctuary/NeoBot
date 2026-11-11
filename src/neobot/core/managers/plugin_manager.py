@@ -6,11 +6,12 @@
 from __future__ import annotations
 
 import importlib
+import inspect
 import os
 import pkgutil
 import sys
 import time
-from typing import List, Set, Tuple
+from typing import List, Optional, Set, Tuple
 
 from .command_manager import CommandManager
 
@@ -228,9 +229,11 @@ class PluginManager(Singleton):
             f"{len(slow)} 个插件加载耗时超过 {self.SLOW_PLUGIN_THRESHOLD:.2f}s，可能拖慢启动: {detail}"
         )
 
-    def reload_plugin(self, full_module_name: str) -> None:
+    def reload_plugin(self, full_module_name: str) -> bool:
         """
         精确重载单个插件。
+
+        :return: 重载成功为 True；模块不存在或重载过程抛错为 False。
         """
         if full_module_name not in self.loaded_plugins:
             self.logger.warning(f"尝试重载一个未被加载的插件: {full_module_name}，将按首次加载处理。")
@@ -242,7 +245,7 @@ class PluginManager(Singleton):
             )
             self.logger.error(f"重载失败: {reload_error.message}")
             self.logger.log_custom_exception(reload_error)
-            return
+            return False
 
         try:
             self.command_manager.unload_plugin(full_module_name)
@@ -252,6 +255,7 @@ class PluginManager(Singleton):
             self._store_manifest(full_module_name, module)
 
             self.logger.success(f"插件 {full_module_name} 已成功重载。")
+            return True
         except SyncHandlerError as e:
             error = PluginReloadError(
                 plugin_name=full_module_name,
@@ -276,6 +280,68 @@ class PluginManager(Singleton):
             )
             self.logger.exception(f"重载插件 {full_module_name} 时发生错误: {error.message}")
             self.logger.log_custom_exception(error)
+        return False
+
+    def _owning_plugin(self, module_name: str) -> Optional[str]:
+        """返回模块自身或包含它的已加载插件包名。"""
+        if module_name in self.loaded_plugins:
+            return module_name
+        parts = module_name.split(".")
+        for index in range(len(parts) - 1, 0, -1):
+            parent = ".".join(parts[:index])
+            if parent in self.loaded_plugins:
+                return parent
+        return None
+
+    async def _invoke_lifecycle_hooks(self, module_name: str, kind: str) -> None:
+        """调用某模块的启动或关闭钩子。单个钩子失败不影响其余钩子。"""
+        from ...plugin_api.lifecycle import hooks_for
+
+        label = "启动" if kind == "startup" else "关闭"
+        for hook in hooks_for(module_name, kind):
+            try:
+                result = hook()
+                if inspect.isawaitable(result):
+                    await result
+            except Exception as e:
+                self.logger.exception(
+                    f"插件 {module_name} {label}钩子 {getattr(hook, '__name__', hook)} 失败: {e}"
+                )
+
+    async def run_startup_hooks(self) -> None:
+        """调用所有已加载插件的启动钩子。应在 Redis 初始化之后调用。"""
+        for name in sorted(self.loaded_plugins):
+            await self._invoke_lifecycle_hooks(name, "startup")
+
+    async def run_shutdown_hooks(self) -> None:
+        """调用所有已加载插件的关闭钩子（进程退出时）。"""
+        for name in sorted(self.loaded_plugins):
+            await self._invoke_lifecycle_hooks(name, "shutdown")
+
+    async def reload_plugin_async(self, full_module_name: str) -> bool:
+        """
+        热重载插件，并在重载前后调用生命周期钩子。
+
+        关闭钩子在 ``importlib.reload`` 之前执行，这样旧模块里的后台任务句柄还在。
+        重载的是某个已加载插件包的子模块时，会重启该插件包的钩子
+        （例如 discord_cross 的 Redis 订阅），子模块自身重载失败时仍会把包拉起来。
+        被重载模块本身重载失败时，不再调用它的启动钩子。
+        """
+        parent = self._owning_plugin(full_module_name)
+        restart_parent = parent is not None and parent != full_module_name
+        if restart_parent and parent is not None:
+            await self._invoke_lifecycle_hooks(parent, "shutdown")
+        await self._invoke_lifecycle_hooks(full_module_name, "shutdown")
+
+        ok = self.reload_plugin(full_module_name)
+
+        if restart_parent and parent is not None:
+            await self._invoke_lifecycle_hooks(parent, "startup")
+        if ok:
+            await self._invoke_lifecycle_hooks(full_module_name, "startup")
+        else:
+            self.logger.error(f"插件 {full_module_name} 重载失败，已跳过其启动钩子")
+        return ok
 
 
 plugin_manager = PluginManager(command_manager=command_manager)

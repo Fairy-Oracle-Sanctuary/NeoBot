@@ -61,11 +61,41 @@ async def handle_broadcast(bot: Bot, event: MessageEvent, args: list[str]):
 类风格插件(`Plugin` / `SimplePlugin` 基类)的方法标记装饰器从
 `neobot.plugin_api.plugin` 导入,与模块级装饰器区分。
 
+## 3.1 生命周期钩子
+
+需要后台任务（轮询、Redis 订阅）的插件自己声明启动/关闭,核心不会在 `main.py` 里点名:
+
+```python
+from neobot.plugin_api import on_startup, on_shutdown
+
+@on_startup
+async def start():
+    ...  # 此时 Redis 已经初始化
+
+@on_shutdown
+async def shutdown():
+    ...  # 取消后台任务
+```
+
+- **启动**: `PluginManager` 在全部插件 import 完成、Redis 就绪后调用已加载插件的 `on_startup`。单个钩子抛错只记日志。
+- **关闭**: 进程退出时调用 `on_shutdown`。热重载该模块之前也会先调用关闭钩子,重载成功后再调用启动钩子——关闭发生在 `importlib.reload` 之前,旧的任务句柄还在。
+- **包插件**: 钩子写在包的 `__init__.py` 上。热重载包内某个子模块时,会先关闭再启动所属插件包的钩子。重载子模块失败时,包级任务仍会重新拉起。
+- **同名替换**: 同一模块里同名函数再次注册会替换旧钩子,热重载不会把钩子叠成多份。
+
+## 3.2 出站消息
+
+机器人发出去的消息走 `message_bus`,适配器不 import 任何产品插件:
+
+- QQ 群 `send_group_msg` / `send_msg(message_type="group")` 发布 `PlatformMessage(platform="qq")`。OneBot 原文在 `raw`,`metadata["no_mirror"]` 为真表示这条消息不应再镜像到其他平台(防环)。发布是后台任务,订阅者抛错或变慢不会影响这次发送。
+- Discord 发送成功后发布 `PlatformMessage(platform="discord", content=...)`。
+- 订阅: `message_bus.on_outgoing(key="你的插件.outgoing")`。`key` 相同会替换旧订阅,方便热重载。总线对每个订阅者单独捕获异常。
+
 ## 4. 公开接口一览
 
 | 分类 | 符号 | 说明 |
 |---|---|---|
 | 注册 | `command` / `platform_command` / `on_message` / `platform_message` / `on_notice` / `on_request` | 命令与事件注册 |
+| 生命周期 | `on_startup` / `on_shutdown` | 插件后台任务的启动与关闭 |
 | 模型 | `MessageEvent` 及其子类 / `NoticeEvent` / `RequestEvent` / `Sender` / `MessageSegment` | 事件与消息数据 |
 | 平台 | `PlatformMessage` / `PlatformSegment` | 跨平台消息载体 |
 | 核心对象 | `Bot` | OneBot API 聚合入口(消息/群组/好友/账号/媒体) |

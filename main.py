@@ -23,7 +23,7 @@ from neobot.core.ws import WS
 from neobot.core.managers import plugin_manager, matcher, permission_manager, reverse_ws_manager, thread_manager
 from neobot.core.managers.redis_manager import redis_manager
 from neobot.core.managers.browser_manager import browser_manager
-from neobot.core.utils.executor import run_in_thread_pool, initialize_executor
+from neobot.core.utils.executor import initialize_executor
 from neobot.core.config_loader import global_config as config
 from neobot.core.services.local_file_server import start_local_file_server, stop_local_file_server
 from neobot.adapters.discord_adapter import DiscordAdapter
@@ -33,11 +33,32 @@ from neobot.adapters.discord_adapter import DiscordAdapter
 PLUGIN_DIR = os.path.join(ROOT_DIR, "src", "neobot", "plugins")
 
 
+def plugin_module_name_from_path(src_path: str) -> str | None:
+    """把插件源文件路径解析成 ``neobot.plugins...`` 模块名。
+
+    包目录里的 ``__init__.py`` 对应包模块本身（生命周期钩子挂在包上）。
+    顶层 ``plugins/__init__.py`` 不参与热重载，避免把整个插件包重载一遍。
+    """
+    if not src_path.endswith(".py"):
+        return None
+    if "__pycache__" in src_path or not src_path.startswith(PLUGIN_DIR):
+        return None
+    relative_path = os.path.relpath(src_path, SRC_DIR)
+    module_name = os.path.splitext(relative_path.replace(os.sep, "."))[0]
+    if module_name.endswith(".__init__"):
+        module_name = module_name[: -len(".__init__")]
+    if module_name == "neobot.plugins" or not module_name.startswith("neobot.plugins."):
+        return None
+    return module_name
+
+
 async def reload_plugin_and_sync_help(module_name: str):
     """
-    重载插件并同步帮助图片
+    重载插件并同步帮助图片。
+
+    生命周期钩子要在事件循环上停掉旧任务再拉起新任务，因此不丢进线程池。
     """
-    await run_in_thread_pool(plugin_manager.reload_plugin, module_name)
+    await plugin_manager.reload_plugin_async(module_name)
     # 插件重载后，重新生成帮助图片
     await matcher.sync_help_pic()
 
@@ -69,13 +90,8 @@ class PluginReloadHandler(FileSystemEventHandler):
             return
         
         src_path = file_system_event.src_path
-        
-        # 只监控 py 文件
-        if not src_path.endswith(".py"):
-            return
-            
-        # 过滤掉一些临时文件和__init__.py文件
-        if "__pycache__" in src_path or not src_path.startswith(PLUGIN_DIR) or os.path.basename(src_path) == "__init__.py":
+        module_name = plugin_module_name_from_path(src_path)
+        if not module_name:
             return
 
         # 简单的防抖动
@@ -85,15 +101,9 @@ class PluginReloadHandler(FileSystemEventHandler):
         
         self.last_reload_time = current_time
         
-        # 从文件路径解析出模块名
-        # 注意：这里必须以 SRC_DIR 为基准，而不是项目根目录 ROOT_DIR。
-        # 插件是按 `neobot.plugins.x` 的名字导入的（sys.path 里放的是 src），
-        # 若以 ROOT_DIR 为基准会得到 `src.neobot.plugins.x`，与 sys.modules 中的键
-        # 对不上，reload_plugin 会一直报「模块未在sys.modules中找到」。
-        # 例如: /app/src/neobot/plugins/bili_parser.py -> neobot.plugins.bili_parser
-        relative_path = os.path.relpath(src_path, SRC_DIR)
-        module_name = os.path.splitext(relative_path.replace(os.sep, '.'))[0]
-
+        # 模块名以 SRC_DIR 为基准，得到 `neobot.plugins.x`，
+        # 与 sys.modules 中的键一致。例如:
+        # /app/src/neobot/plugins/bili_parser.py -> neobot.plugins.bili_parser
         logger.info(f"检测到文件变更: {src_path}")
         logger.info(f"准备重载插件: {module_name}...")
         
@@ -118,32 +128,14 @@ async def main():
     #from neobot.core.managers.vectordb_manager import vectordb_manager
     #vectordb_manager.initialize()
 
-    # 首先加载所有插件
+    # 首先加载所有插件（import 时只注册钩子，不启动后台任务）
     plugin_manager.load_all_plugins()
 
-    # 初始化 Redis 连接
+    # 初始化 Redis 连接。启动钩子里的订阅/同步依赖 Redis，因此放在其后。
     await redis_manager.initialize()
 
-    # 启动晚风人永久租赁审核轮询（后台任务：30s 轮询待审申请 → 私聊推送管理员）
-    try:
-        from neobot.plugins.wanfeng_review import start as start_wanfeng_review
-        await start_wanfeng_review()
-    except Exception as e:
-        logger.exception(f"启动晚风人审核轮询失败: {e}")
-
-    # 启动晚风群成员同步（后台任务：10min 拉取群成员 → 覆盖 Redis 集合，供 is_wanfeng 判定）
-    try:
-        from neobot.plugins.wanfeng_members import start as start_wanfeng_members
-        await start_wanfeng_members()
-    except Exception as e:
-        logger.exception(f"启动晚风群成员同步失败: {e}")
-
-    # 启动跨平台消息订阅（Discord ↔ QQ，依赖 Redis）
-    from neobot.plugins.discord_cross import start as start_cross_platform
-    try:
-        await start_cross_platform()
-    except Exception as e:
-        logger.exception(f"启动跨平台订阅失败: {e}")
+    # 插件自行通过 on_startup 注册后台任务（审核轮询、成员同步、跨平台订阅等）
+    await plugin_manager.run_startup_hooks()
 
     # 同步帮助图片
     await matcher.sync_help_pic()
@@ -224,13 +216,12 @@ async def main():
         if discord_client:
             await discord_client.close()
 
-        # 停止跨平台订阅
-        from neobot.plugins.discord_cross import shutdown as stop_cross_platform
+        # 插件关闭钩子（取消后台任务）。单个插件失败不影响其余清理。
         try:
-            await stop_cross_platform()
+            await plugin_manager.run_shutdown_hooks()
         except Exception as e:
-            logger.exception(f"停止跨平台订阅失败: {e}")
-            
+            logger.exception(f"插件关闭钩子失败: {e}")
+
         # 关闭反向 WebSocket 服务端
         if config.reverse_ws.enabled and reverse_ws_manager.server:
             await reverse_ws_manager.stop()

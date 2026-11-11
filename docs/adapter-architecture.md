@@ -52,9 +52,7 @@
 
 - `message_bus.on_incoming(platform)`：订阅入站消息（转发器等业务逻辑挂这里）
 - `message_bus.publish_incoming(msg)`：适配器收到消息后发布
-- `message_bus.on_outgoing()` / `publish_outgoing(msg)`：出站发送通知（预留）
-
-单个订阅者异常不影响其他订阅者（错误隔离）。
+- `message_bus.on_outgoing(key=...)` / `publish_outgoing(msg)`：出站发送通知。QQ 群发送与 Discord 发送成功后发布；`metadata["no_mirror"]` 表示不要再镜像。订阅者异常不影响发送，也不影响其他订阅者。
 
 ### 2.3 CommandContext（`core/messaging/context.py`）
 
@@ -95,10 +93,10 @@ async def on_dc(event): ...
   自身 bot 消息；发送层只上报、不转发
 - 入口：
   - `forward_qq_to_discord` / `forward_discord_to_qq`：用户消息
-  - `notify_qq_sent` / `notify_discord_sent`：机器人发送后上报
+  - `notify_qq_sent` / `notify_discord_sent`：机器人发送后上报（由出站总线订阅者调用，不由 `ws.py` / `router.py` 直接 import）
 
-转发器订阅消息总线（`on_incoming("qq")` / `on_incoming("discord")`），
-用户消息由总线驱动转发。
+转发器订阅消息总线（`on_incoming("qq")` / `on_incoming("discord")` / `on_outgoing`）。
+用户消息与机器人自己发出的消息都由总线驱动转发。
 
 ## 3. 数据流
 
@@ -122,10 +120,10 @@ Discord on_message → PlatformMessage(discord) → message_bus.publish_incoming
 
 ### 3.3 机器人消息跨平台可见
 
-- 机器人在 QQ 群回复 → `ws.call_api` 钩子 → `forwarder.notify_qq_sent` → Discord
-- 机器人在 Discord 回复 → `send_discord_message` 后 → `forwarder.notify_discord_sent` → QQ
+- 机器人在 QQ 群回复 → `ws.call_api` 发布 `PlatformMessage(platform="qq", raw=OneBot 消息)` → `forwarder` 的出站订阅解析正文并 `notify_qq_sent` → Discord
+- 机器人在 Discord 回复 → `send_discord_message` 成功后发布 `PlatformMessage(platform="discord")` → `notify_discord_sent` → QQ（带 `_no_mirror`，QQ 侧订阅者看到 `metadata["no_mirror"]` 后不再回镜像）
 
-两者都经过同一套去重/防环。
+两者都经过同一套去重/防环。订阅者抛错不会让这次发送失败。
 
 ## 4. 迁移状态
 

@@ -293,111 +293,44 @@ class WS:
             )
             self.logger.log_custom_exception(error)
 
-    async def _notify_qq_sent(self, params):
-        """Gateway mirror: QQ group -> Discord channel (one-way)"""
-        def _build_filename(msg_type, data):
-            filename = data.get("filename", "")
-            if filename:
-                return filename
-            file_field = data.get("file", "")
-            if file_field and not file_field.startswith(("http", "data:", "/")):
-                return file_field
-            ext_map = {"image": ".png", "video": ".mp4", "record": ".wav", "file": ".bin"}
-            return msg_type + ext_map.get(msg_type, ".bin")
+    def _build_outgoing_group_message(self, action: str, params: Dict[Any, Any]):
+        """把一次 QQ 群发送整理成平台无关的出站消息。非群发返回 None。
 
+        不解析消息正文、不关心有谁在听。``raw`` 保留 OneBot 消息，
+        ``metadata['no_mirror']`` 把「不要再镜像」这个发送参数交给订阅者。
+        """
+        is_group_send = (
+            action == "send_group_msg"
+            or (action == "send_msg" and params.get("message_type") == "group")
+        )
+        group_id = params.get("group_id")
+        if not is_group_send or group_id is None:
+            return None
+        from neobot.core.messaging.message import PlatformMessage
+
+        return PlatformMessage(
+            platform="qq",
+            channel_id=group_id,
+            channel_type="group",
+            message_id=None,
+            author_id=self.self_id or 0,
+            author_name="",
+            content="",
+            segments=[],
+            metadata={
+                "no_mirror": bool(params.get("_no_mirror")),
+                "action": action,
+            },
+            raw=params.get("message"),
+        )
+
+    async def _publish_outgoing(self, message) -> None:
+        """发布出站通知。总线或订阅者的异常不得影响 API 发送。"""
         try:
-            from neobot.plugins.discord_cross.config import config
-
-            if not config.ENABLE_CROSS_PLATFORM:
-                return
-
-            group_id = params.get("group_id")
-            message = params.get("message", "")
-
-            content = ""
-            attachments = []
-            reply_ids = []
-            if isinstance(message, list):
-                for seg in message:
-                    if isinstance(seg, dict):
-                        if seg.get("type") == "text":
-                            content += seg.get("data", {}).get("text", "")
-                        elif seg.get("type") == "at":
-                            qq = seg.get("data", {}).get("qq", "")
-                            content += f"@{qq}"
-                        elif seg.get("type") == "reply":
-                            reply_id = seg.get("data", {}).get("id", "")
-                            if reply_id:
-                                reply_ids.append(reply_id)
-                        elif seg.get("type") in ("image", "video", "record", "file"):
-                            url = seg.get("data", {}).get("url") or seg.get("data", {}).get("file")
-                            if url:
-                                seg_data = seg.get("data", {})
-                                filename = _build_filename(seg["type"], seg_data)
-                                attachments.append({"type": seg["type"], "url": str(url), "filename": filename})
-                    elif isinstance(seg, str):
-                        content += seg
-            elif isinstance(message, dict):
-                if message.get("type") == "text":
-                    content = message.get("data", {}).get("text", "")
-                elif message.get("type") == "at":
-                    qq = message.get("data", {}).get("qq", "")
-                    content = f"@{qq}"
-                elif message.get("type") == "reply":
-                    reply_id = message.get("data", {}).get("id", "")
-                    if reply_id:
-                        reply_ids.append(reply_id)
-                elif message.get("type") in ("image", "video", "record", "file"):
-                    url = message.get("data", {}).get("url") or message.get("data", {}).get("file")
-                    if url:
-                        msg_data = message.get("data", {})
-                        filename = _build_filename(message["type"], msg_data)
-                        attachments.append({"type": message["type"], "url": str(url), "filename": filename})
-            elif isinstance(message, str):
-                content = message
-
-            for reply_id in reply_ids:
-                try:
-                    reply_result = await self.call_api("get_msg", {"message_id": int(reply_id)})
-                    if reply_result and "data" in reply_result:
-                        reply_msg = reply_result["data"]
-                        raw = reply_msg.get("raw_message", "") or ""
-                        if isinstance(reply_msg.get("message"), list):
-                            raw = "".join(
-                                s.get("data", {}).get("text", "")
-                                for s in reply_msg["message"]
-                                if isinstance(s, dict) and s.get("type") == "text"
-                            )
-                        if raw:
-                            prefix = f"> {str(raw)[:200]}\n"
-                            content = prefix + content
-                    else:
-                        content = f"[回复消息 #{reply_id}] {content}"
-                except Exception:
-                    content = f"[回复消息 #{reply_id}] {content}"
-
-            if not content and not attachments:
-                self.logger.debug("[GatewayMirror:QQ→DC] 消息内容为空，跳过")
-                return
-
-            self.logger.debug(f"[GatewayMirror:QQ→DC] 提取内容: content_len={len(content)}, attachments={len(attachments)}")
-
-            from neobot.plugins.discord_cross.forwarder import forwarder
-
-            self.logger.info(f"[GatewayMirror:QQ→DC] 上报 QQ 已发送消息: group={group_id}, content='{content[:80]}...'")
-            await forwarder.notify_qq_sent(
-                qq_nickname="NeoBot",
-                qq_user_id=self.self_id or 0,
-                group_name=f"群{group_id}",
-                group_id=group_id,
-                content=content,
-                attachments=attachments,
-            )
-
+            from neobot.core.messaging.bus import message_bus
+            await message_bus.publish_outgoing(message)
         except Exception as e:
-            self.logger.error(f"[GatewayMirror:QQ→DC] 异常: {e}")
-            import traceback
-            self.logger.error(f"[GatewayMirror:QQ→DC] 异常堆栈: {traceback.format_exc()}")
+            self.logger.error(f"出站消息通知失败: {e}")
 
     async def close(self) -> None:
         """
@@ -413,7 +346,7 @@ class WS:
         if self.ws:
             await self.ws.close()
 
-        # 取消所有后台任务（on_event / _notify_qq_sent 等）
+        # 取消所有后台任务（on_event / 出站通知等）
         self._cancel_background_tasks()
 
         # 取消所有挂起的请求
@@ -461,32 +394,11 @@ class WS:
         if params is None:
             params = {}
 
-        from neobot.core.utils.logger import ModuleLogger
-        gw_logger = ModuleLogger("GatewayMirror")
-
-        # Gateway mirror: 拦截发送至 QQ 群的消息，单向同步到 Discord
-        # 触发条件：
-        #   1. 未显式标记 _no_mirror（避免反向同步造成回环）
-        #   2. action 为 send_group_msg 或 send_msg(message_type=group)
-        #   3. 存在 group_id
-        #   4. 跨平台同步已启用（在触发点提前判断，避免无谓的 fire-and-forget 任务）
-        if not params.get("_no_mirror"):
-            is_group_send = (
-                action == "send_group_msg"
-                or (action == "send_msg" and params.get("message_type") == "group")
-            )
-            group_id = params.get("group_id")
-            if is_group_send and group_id is not None:
-                try:
-                    from neobot.plugins.discord_cross.config import config as _cross_config
-                    cross_enabled = _cross_config.ENABLE_CROSS_PLATFORM
-                except Exception:
-                    cross_enabled = False
-                if cross_enabled:
-                    gw_logger.debug(
-                        f"[GatewayMirror:QQ→DC] 触发同步: action={action}, group_id={group_id}"
-                    )
-                    self._spawn_task(self._notify_qq_sent(params))
+        # 群消息出站通知：fire-and-forget，订阅者失败或变慢都不能挡住本次发送。
+        # _no_mirror 原样放进 metadata，由订阅者决定要不要镜像（核心不知道有哪些订阅者）。
+        outgoing = self._build_outgoing_group_message(action, params)
+        if outgoing is not None:
+            self._spawn_task(self._publish_outgoing(outgoing))
 
         actual_params = {k: v for k, v in params.items() if not k.startswith("_")}
         echo_id = str(uuid.uuid4())
