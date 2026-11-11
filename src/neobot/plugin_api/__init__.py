@@ -52,6 +52,7 @@ from neobot.plugin_api.decorators import (
     platform_command,
     platform_message,
 )
+from neobot.plugin_api.lifecycle import on_shutdown, on_startup
 from neobot.plugin_api.events import (
     Anonymous,
     ClientStatus,
@@ -157,6 +158,8 @@ __all__ = [
     "platform_message",
     "on_notice",
     "on_request",
+    "on_startup",
+    "on_shutdown",
     # 模型与消息
     "MessageSegment",
     "PlatformMessage",

@@ -12,7 +12,14 @@
 """
 import asyncio
 from typing import Dict, List
-from neobot.plugin_api import mcc_manager, bot_manager, platform_command, logger
+from neobot.plugin_api import (
+    bot_manager,
+    logger,
+    mcc_manager,
+    on_shutdown,
+    on_startup,
+    platform_command,
+)
 # 管理员 QQ（唯一有审核权限的人）
 ADMIN_QQ = 2221577113
 
@@ -95,6 +102,7 @@ async def _poll_loop() -> None:
         await asyncio.sleep(POLL_INTERVAL)
 
 
+@on_startup
 async def start() -> bool:
     """启动后台审核轮询任务。"""
     global _tasks, _running
@@ -107,6 +115,7 @@ async def start() -> bool:
     return True
 
 
+@on_shutdown
 async def stop() -> bool:
     """停止后台轮询任务。"""
     global _tasks, _running

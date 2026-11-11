@@ -13,7 +13,7 @@ mcc-service 的 /api/rental/status 直接 SISMEMBER 该集合返回 is_wanfeng�
 """
 import asyncio
 from typing import List
-from neobot.plugin_api import bot_manager, redis_manager, logger
+from neobot.plugin_api import bot_manager, logger, on_shutdown, on_startup, redis_manager
 # 晚风群群号（与 wanfeng_login.py 的 ALLOWED_GROUP_ID 一致）
 WANFENG_GROUP_ID = 854312725
 # 晚风标识 Redis key（Set 集合，存有标识的 QQ）
@@ -65,6 +65,7 @@ async def _sync_loop() -> None:
         await asyncio.sleep(SYNC_INTERVAL)
 
 
+@on_startup
 async def start() -> bool:
     """启动后台群成员同步任务。"""
     global _tasks, _running
@@ -77,6 +78,7 @@ async def start() -> bool:
     return True
 
 
+@on_shutdown
 async def stop() -> bool:
     """停止后台同步任务。"""
     global _tasks, _running

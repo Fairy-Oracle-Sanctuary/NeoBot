@@ -112,3 +112,55 @@ def scan_module_file_single(path: str) -> List[str]:
     except (OSError, UnicodeDecodeError):
         return []
     return scan_plugin_imports(source)
+
+
+def _is_plugin_module(module: str) -> bool:
+    """判断模块路径是否落在产品插件包内(精确边界,避免误伤 neobot.plugins_extra)。"""
+    return module == "neobot.plugins" or module.startswith("neobot.plugins.")
+
+
+def scan_framework_plugin_imports(source: str) -> List[str]:
+    """
+    AST 扫描框架源码,返回对 ``neobot.plugins`` 的 import(去重、保序)。
+
+    同时覆盖:
+    - 顶层与函数内的 ``import`` / ``from ... import``(惰性 import);
+    - ``importlib.import_module("neobot.plugins...")`` 与 ``__import__("...")`` 的字面量参数。
+
+    插件管理器按目录拼出的动态模块名(f-string / 变量)不在此列——
+    那是通用加载器,不是对某个产品插件的依赖。
+    源码无法解析时返回空列表。
+    """
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return []
+
+    violations: List[str] = []
+    seen: set = set()
+
+    def add(module: str) -> None:
+        if module and _is_plugin_module(module) and module not in seen:
+            seen.add(module)
+            violations.append(module)
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                add(alias.name)
+        elif isinstance(node, ast.ImportFrom):
+            if node.module:
+                add(node.module)
+        elif isinstance(node, ast.Call) and node.args:
+            func = node.func
+            called = ""
+            if isinstance(func, ast.Name):
+                called = func.id
+            elif isinstance(func, ast.Attribute):
+                called = func.attr
+            if called in {"import_module", "__import__"}:
+                arg = node.args[0]
+                if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                    add(arg.value)
+
+    return violations

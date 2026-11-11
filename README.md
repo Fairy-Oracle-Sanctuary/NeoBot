@@ -79,7 +79,7 @@
 
 ### 核心特性
 
-*   **模块化插件架构**：所有功能都在 `src/neobot/plugins/` 目录，开发者可轻松扩展
+*   **模块化插件架构**：所有功能都在 `src/neobot/plugins/` 目录，开发者可轻松扩展。需要后台任务的插件用 `on_startup` / `on_shutdown` 自注册，核心启动时统一调用，不在 `main.py` 里点名具体插件
 *   **性能优化**：
     *   **异步 IO**：`asyncio` + 连接池化管理（HTTP / Redis / 浏览器页面池）
     *   **Python 3.14 JIT（可选）**：Python 3.14 下可开启 `-X jit` 运行时编译热点代码

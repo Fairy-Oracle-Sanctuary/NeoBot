@@ -10,7 +10,7 @@
 2. 将其"伪装"成 OneBot 的 `GroupMessageEvent` 或 `PrivateMessageEvent`。
 3. 拦截插件调用的 `event.reply()` 方法。
 4. 将插件返回的 OneBot `MessageSegment` 转换为 Discord 格式并发送。
-5. 将机器人回复的消息转发到跨平台映射的另一端
+5. 发送成功后向消息总线发布出站通知（是否镜像到其他平台由订阅者决定）
 """
 import base64
 import io
@@ -308,13 +308,29 @@ class DiscordToOneBotConverter:
 
             if content or files:
                 await channel.send(content=content, files=files if files else None)
-                from neobot.plugins.discord_cross.forwarder import forwarder
+                try:
+                    from neobot.core.messaging.bus import message_bus
+                    from neobot.core.messaging.message import PlatformMessage
 
-                if adapter.user:
-                    sender_name = getattr(adapter.user, 'global_name', None) or adapter.user.name
-                else:
-                    sender_name = "Bot"
-                await forwarder.notify_discord_sent(channel.id, content, sender_name=sender_name)
+                    if adapter.user:
+                        sender_name = getattr(adapter.user, 'global_name', None) or adapter.user.name
+                        author_id = adapter.user.id
+                    else:
+                        sender_name = "Bot"
+                        author_id = 0
+                    await message_bus.publish_outgoing(
+                        PlatformMessage(
+                            platform="discord",
+                            channel_id=channel.id,
+                            channel_type="group",
+                            message_id=None,
+                            author_id=author_id,
+                            author_name=sender_name,
+                            content=content or "",
+                        )
+                    )
+                except Exception as e:
+                    logger.error(f"出站消息通知失败: {e}")
             else:
                 logger.warning("尝试发送空消息到 Discord，已拦截")
         except Exception as e:

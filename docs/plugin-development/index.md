@@ -48,7 +48,23 @@ async def handle_hello(event: MessageEvent):
 ## 2. 加载插件
 
 不用你动手，NEO Bot 启动时会自动加载 `src/neobot/plugins/` 目录下的所有 `.py` 文件（含子目录包）。
-修改插件文件后，通过热重载指令即可生效，无需重启 Bot。
+修改插件文件后，通过热重载即可生效，无需重启 Bot。
+
+需要在启动后跑后台任务（轮询、订阅）时，用 `on_startup` / `on_shutdown` 声明，不要改 `main.py`：
+
+```python
+from neobot.plugin_api import on_shutdown, on_startup
+
+@on_startup
+async def start():
+    ...
+
+@on_shutdown
+async def shutdown():
+    ...
+```
+
+框架会在 Redis 就绪后调用 `start`，进程退出或热重载前调用 `shutdown`。热重载成功后会再次调用 `start`。
 
 ## 3. 测试插件
 

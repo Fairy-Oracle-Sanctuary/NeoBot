@@ -4,14 +4,14 @@
 
 QQ↔Discord 的转发决策、映射、去重、防环全部收敛到这一处：
 - 用户消息：handlers 调 forward_qq_to_discord / forward_discord_to_qq
-- 机器人发送的消息：发送层调 notify_qq_sent / notify_discord_sent 上报，
-  由本转发器决定是否需要转发到另一端（不再在发送函数里直接转发）
+- 机器人发送的消息：发送层把 PlatformMessage 发到 message_bus.on_outgoing，
+  由本转发器订阅后决定是否需要转发到另一端（核心不知道本插件存在）
 - 统一去重（TTL 内同平台同频道同内容不重复转发）与防环（发送端不再有副作用）
 """
 import hashlib
 import time
 from typing import Dict, List, Optional, Tuple
-from neobot.plugin_api import ModuleLogger, message_bus
+from neobot.plugin_api import ModuleLogger, bot_manager, message_bus
 from .config import config
 from .sender import (
     forward_discord_to_qq as _send_discord_to_qq,
@@ -177,10 +177,43 @@ async def _bus_discord_incoming(msg):
     )
 
 
+async def _fetch_reply(reply_id, self_id=None):
+    """用在线 Bot 拉取被回复的 QQ 消息。没有 Bot 时返回 None，由镜像层走兜底文案。"""
+    bots = list(bot_manager.get_all_bots() or [])
+    bot = None
+    if self_id:
+        for candidate in bots:
+            if getattr(candidate, "self_id", None) == self_id:
+                bot = candidate
+                break
+    if bot is None and bots:
+        bot = bots[0]
+    if bot is None or not hasattr(bot, "get_msg"):
+        return None
+    return await bot.get_msg(int(reply_id))
+
+
+async def _bus_outgoing(msg):
+    """机器人发出的消息 → 决定是否镜像到另一端。订阅者异常由总线隔离。"""
+    from .outgoing import handle_outgoing_message
+
+    async def fetch_reply(reply_id):
+        return await _fetch_reply(reply_id, getattr(msg, "author_id", None))
+
+    await handle_outgoing_message(
+        msg,
+        notify_qq_sent=forwarder.notify_qq_sent,
+        notify_discord_sent=forwarder.notify_discord_sent,
+        fetch_reply=fetch_reply,
+        enabled=config.ENABLE_CROSS_PLATFORM,
+    )
+
+
 def _register_bus_subscriptions():
     # key 唯一标识本模块的订阅：热重载后同 key 重新注册会自动替换旧订阅，避免订阅者累积
     message_bus.on_incoming("qq", key="forwarder._bus_qq_incoming")(_bus_qq_incoming)
     message_bus.on_incoming("discord", key="forwarder._bus_discord_incoming")(_bus_discord_incoming)
+    message_bus.on_outgoing(key="forwarder._bus_outgoing")(_bus_outgoing)
 
 
 _register_bus_subscriptions()

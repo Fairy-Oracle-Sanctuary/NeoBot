@@ -137,7 +137,7 @@ NEO Bot 的“骨架”是由一堆现代 Python 库和技术堆起来的。下�
 ### 架构模式
 *   **Singleton (单例)**: 全局唯一实例，所有管理器都是单例
 *   **Connection Pool (连接池)**: Redis 连接、HTTP 会话都复用
-*   **Plugin System (插件系统)**: 动态导入、装饰器注册，一个 `.py` 文件就是一个插件
+*   **Plugin System (插件系统)**: 动态导入、装饰器注册，一个 `.py` 文件就是一个插件。后台任务用 `on_startup` / `on_shutdown` 注册，由 `PluginManager` 统一调用
 
 ## 5. Python 动态语言特性运用
 
