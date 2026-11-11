@@ -14,7 +14,7 @@ Jinja2==3.1.6
 loguru==0.7.3
 orjson==3.11.8
 ossapi==5.3.4
-pillow==12.3.0  # PYSEC-2026-2253~3496 系列修复
+pillow==13.0.0  # PYSEC-2026-2253~3496 系列修复
 playwright==1.58.0
 psutil==7.2.2
 pydantic==2.13.2
