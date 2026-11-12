@@ -18,6 +18,18 @@ from ..managers.redis_manager import redis_manager
 from neobot.core.managers.permission_manager import permission_manager
 
 
+def raw_message_text(event: Any) -> str:
+    """取出原始消息文本。非字符串（例如测试里的 Mock）按空串处理，避免下标访问崩溃。"""
+    raw = getattr(event, "raw_message", "")
+    if isinstance(raw, str):
+        return raw
+    return ""
+
+
+def raw_message_preview(event: Any, limit: int = 80) -> str:
+    return raw_message_text(event)[:limit]
+
+
 class BaseHandler(ABC):
     """
     事件处理器抽象基类
@@ -222,7 +234,7 @@ class MessageHandler(BaseHandler):
             key=lambda h: h.get("priority", 10),
         )
         dispatch_logger = ModuleLogger("EventDispatch")
-        dispatch_logger.debug(f"[EventDispatch:TRACE] 开始分发消息事件: raw='{event.raw_message[:80] if event.raw_message else ''}', handlers={len(sorted_handlers)}")
+        dispatch_logger.debug(f"[EventDispatch:TRACE] 开始分发消息事件: raw='{raw_message_preview(event)}', handlers={len(sorted_handlers)}")
 
         for handler_info in sorted_handlers:
             consumed = await self._run_handler(handler_info["func"], bot, event)
@@ -233,15 +245,15 @@ class MessageHandler(BaseHandler):
                     dispatch_logger.warning(
                         f"[EventDispatch] handler 阻断事件分发: plugin={handler_info['plugin_name']}, "
                         f"priority={handler_info.get('priority', 10)}, "
-                        f"raw_message='{event.raw_message[:80] if event.raw_message else ''}'"
+                        f"raw_message='{raw_message_preview(event)}'"
                     )
                 return
 
-        if not event.raw_message:
+        raw_text = raw_message_text(event).strip()
+        if not raw_text:
             dispatch_logger.debug("[EventDispatch:TRACE] 无 raw_message，跳过命令匹配")
             return
 
-        raw_text = event.raw_message.strip()
         prefix_found = next((p for p in self.prefixes if raw_text.startswith(p)), None)
 
         if not prefix_found:
@@ -306,7 +318,7 @@ class MessageHandler(BaseHandler):
         dispatch_logger = ModuleLogger("EventDispatch")
         dispatch_logger.debug(
             f"[PlatformDispatch:TRACE] platform={getattr(ctx, 'platform', '?')}, "
-            f"raw='{(getattr(ctx, 'raw_message', '') or '')[:80]}'"
+            f"raw='{raw_message_preview(ctx)}'"
         )
 
         handlers = list(self.platform_handlers.get(getattr(ctx, "platform", ""), []))
@@ -317,7 +329,7 @@ class MessageHandler(BaseHandler):
             if consumed or handler_info.get("block", False):
                 return
 
-        raw_text = (getattr(ctx, "raw_message", "") or "").strip()
+        raw_text = raw_message_text(ctx).strip()
         prefix_found = next((p for p in self.prefixes if raw_text.startswith(p)), None)
         if not prefix_found:
             return
@@ -328,7 +340,7 @@ class MessageHandler(BaseHandler):
         dispatch_logger = ModuleLogger("EventDispatch")
 
         if not raw_text:
-            raw_text = (getattr(ctx, "raw_message", "") or "").strip()
+            raw_text = raw_message_text(ctx).strip()
         if not prefix_found:
             prefix_found = next((p for p in self.prefixes if raw_text.startswith(p)), None)
         if not prefix_found:

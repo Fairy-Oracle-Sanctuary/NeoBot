@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 from neobot.core.handlers.event_handler import MessageHandler, NoticeHandler, RequestHandler
 from neobot.models.events.message import GroupMessageEvent
 from neobot.models.events.notice import GroupIncreaseNoticeEvent
@@ -9,6 +9,21 @@ from neobot.models.events.request import FriendRequestEvent
 def mock_bot():
     bot = AsyncMock()
     return bot
+
+@pytest.mark.asyncio
+async def test_handle_does_not_subscript_non_string_raw_message(mock_bot):
+    """非字符串 raw_message（Mock 不能下标）不得让分发崩溃。"""
+    handler = MessageHandler(prefixes=("/",))
+    event = MagicMock(spec=GroupMessageEvent)
+    event.raw_message = Mock()
+    event.user_id = 123
+
+    with patch(
+        "neobot.core.handlers.event_handler.redis_manager.execute_lua_script",
+        new_callable=AsyncMock,
+    ):
+        await handler.handle(mock_bot, event)
+
 
 @pytest.mark.asyncio
 async def test_message_handler_run_handler_injection(mock_bot):
