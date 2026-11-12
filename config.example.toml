@@ -10,6 +10,10 @@ reconnect_interval = 5
 command = ["/"]
 ignore_self_message = true
 permission_denied_message = "权限不足，需要 {permission_name} 权限"
+# 别的机器人的指令。看到这些名字保持沉默，不要回复「你是不是想用 …」
+unknown_command_ignore = ["今日猪猪", "我的猪圈"]
+# 同一群两次未知指令提示的最小间隔（秒）
+unknown_command_hint_interval = 60
 
 [redis]
 host = "localhost"
@@ -100,6 +104,12 @@ token = ""
 
 [cross_platform]
 enabled = false
+
+[daily]
+# /今日运势 的盐。换掉会使同一天的结果改变。不是密钥，可以留空。
+salt = ""
+# /今天吃什么 的菜单。留空（foods = []）则使用插件内置的一份。
+foods = ["番茄炒蛋", "味噌拉面", "葱油拌面", "小笼包"]
 
 [logging]
 # 长期运行时建议用 INFO：DEBUG 会把每条消息、每个事件都写进文件，磁盘增长很快
