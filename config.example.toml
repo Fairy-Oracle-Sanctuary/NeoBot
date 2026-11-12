@@ -40,6 +40,13 @@ concurrency_limit = 5
 # 只有准备好镜像并且明确要开放时才改成 true。不要为了这个去挂载 docker.sock。
 enabled = false
 
+[reminder]
+# /提醒 的上限。时间用 Asia/Shanghai。
+max_per_user = 8
+max_per_group = 40
+# 循环提醒的最短间隔（分钟）。每天一次不受这个限制卡住。
+min_interval_minutes = 30
+
 [link_cache]
 # 解析结果缓存（秒）。Redis 可用时放 Redis，否则用内存 LRU。
 ttl_seconds = 600

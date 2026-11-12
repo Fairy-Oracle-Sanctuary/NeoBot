@@ -176,6 +176,13 @@ class DockerModel(BaseModel):
     client_key_path: Optional[str] = None
 
 
+class ReminderModel(BaseModel):
+    """/提醒 的上限。时间按 Asia/Shanghai。"""
+    max_per_user: int = 8
+    max_per_group: int = 40
+    min_interval_minutes: int = 30
+
+
 class LinkCacheModel(BaseModel):
     """
     链接解析缓存。
@@ -411,6 +418,7 @@ class ConfigModel(BaseModel):
     docker: DockerModel
     code_py: CodePyModel = Field(default_factory=CodePyModel)
     link_cache: LinkCacheModel = Field(default_factory=LinkCacheModel)
+    reminder: ReminderModel = Field(default_factory=ReminderModel)
     image_manager: ImageManagerModel
     reverse_ws: ReverseWSModel
     threading: ThreadingModel = Field(default_factory=ThreadingModel)
