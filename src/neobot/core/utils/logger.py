@@ -17,6 +17,17 @@ except ImportError:
 
 # 默认日志保留天数（配置文件未指定时使用）
 DEFAULT_RETENTION_DAYS = 7
+
+
+def resolve_retention_days(value, default: int = DEFAULT_RETENTION_DAYS) -> int:
+    """保留天数只认正整数。缺省、写错或小于 1 都回到默认，避免被写成 1 天。"""
+    try:
+        days = int(value)
+    except (TypeError, ValueError):
+        return default
+    if days < 1:
+        return default
+    return days
 # 环境变量覆盖项，与 config_loader 中 LOG_LEVEL 等保持同名
 _LOGGING_ENV_KEYS = (
     ("level", "LOG_LEVEL"),
@@ -84,16 +95,13 @@ if USE_CONFIG:
     LOG_LEVEL = global_config.logging.level
     FILE_LEVEL = global_config.logging.file_level
     CONSOLE_LEVEL = global_config.logging.console_level
-    RETENTION_DAYS = getattr(global_config.logging, "retention_days", DEFAULT_RETENTION_DAYS)
+    RETENTION_DAYS = resolve_retention_days(getattr(global_config.logging, "retention_days", None))
 else:
     _fallback_logging = _read_logging_config_from_file()
     LOG_LEVEL = _fallback_logging.get("level", "DEBUG")
     FILE_LEVEL = _fallback_logging.get("file_level", LOG_LEVEL)
     CONSOLE_LEVEL = _fallback_logging.get("console_level", "INFO")
-    try:
-        RETENTION_DAYS = int(_fallback_logging.get("retention_days", DEFAULT_RETENTION_DAYS))
-    except (TypeError, ValueError):
-        RETENTION_DAYS = DEFAULT_RETENTION_DAYS
+    RETENTION_DAYS = resolve_retention_days(_fallback_logging.get("retention_days"))
 
 # 添加控制台输出处理器
 logger.add(
@@ -109,20 +117,37 @@ log_dir = Path("logs")
 log_dir.mkdir(exist_ok=True)
 log_file_path = log_dir / "{time:YYYY-MM-DD}.log"
 
-# 添加文件输出处理器
-logger.add(
-    log_file_path,
-    level=FILE_LEVEL,
-    format=DEBUG_LOG_FORMAT,
-    colorize=False,
-    rotation="00:00",  # 每天午夜创建新文件
-    retention=f"{RETENTION_DAYS} days",  # 保留最近 N 天日志，由 [logging] retention_days 控制
-    encoding="utf-8",
-    enqueue=True,  # 异步写入
-    backtrace=True,  # 记录完整的异常堆栈
-    diagnose=False   # 不启用异常变量诊断（diagnose=True 会捕获局部变量快照，
-                     # 含图片字节/base64 时造成瞬时内存峰值）
-)
+# 文件日志只有这一处注册。配置加载完成后会按校验过的 retention_days 重挂一次。
+_file_sink_id = None
+
+
+def apply_retention_days(days) -> int:
+    """按天数重挂文件日志。返回实际采用的天数。"""
+    global _file_sink_id
+    kept = resolve_retention_days(days)
+    if _file_sink_id is not None:
+        try:
+            logger.remove(_file_sink_id)
+        except ValueError:
+            pass
+        _file_sink_id = None
+    _file_sink_id = logger.add(
+        log_file_path,
+        level=FILE_LEVEL,
+        format=DEBUG_LOG_FORMAT,
+        colorize=False,
+        rotation="00:00",  # 每天午夜创建新文件
+        retention=f"{kept} days",
+        encoding="utf-8",
+        enqueue=True,  # 异步写入
+        backtrace=True,  # 记录完整的异常堆栈
+        diagnose=False,  # 不启用异常变量诊断（diagnose=True 会捕获局部变量快照，
+                         # 含图片字节/base64 时造成瞬时内存峰值）
+    )
+    return kept
+
+
+apply_retention_days(RETENTION_DAYS)
 
 # 为自定义异常添加专门的日志记录方法
 def log_exception(exc, module_name="unknown", level="error"):
@@ -197,4 +222,4 @@ class ModuleLogger:
         log_exception(exc, self.module_name, level)
 
 # 导出配置好的 logger 和工具函数
-__all__ = ["logger", "log_exception", "ModuleLogger"]
+__all__ = ["logger", "log_exception", "ModuleLogger", "resolve_retention_days", "apply_retention_days", "DEFAULT_RETENTION_DAYS"]

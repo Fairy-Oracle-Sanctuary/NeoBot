@@ -9,7 +9,7 @@ from pathlib import Path
 import tomllib
 from pydantic import ValidationError
 from .config_models import ConfigModel, NapCatWSModel, BotModel, RedisModel, DockerModel, CodePyModel, ImageManagerModel, MySQLModel, ReverseWSModel, ThreadingModel, BilibiliModel, DouyinModel, JinmanModel, EhentaiModel, DivingFishModel, LocalFileServerModel, DiscordModel, CrossPlatformModel, LoggingModel, McCAdapterModel, DailyModel, DiceModel, PokeModel, PollModel, CaptionModel, SaucenaoModel, E926Model, MusicModel, DailyCpModel
-from .utils.logger import ModuleLogger
+from .utils.logger import ModuleLogger, apply_retention_days, resolve_retention_days
 from .utils.exceptions import ConfigError, ConfigNotFoundError, ConfigValidationError
 from .utils.env_loader import env_loader
 
@@ -60,6 +60,7 @@ class Config:
             raw_config = self._override_with_env_vars(raw_config)
             
             self._model = ConfigModel(**raw_config)
+            apply_retention_days(self._model.logging.retention_days)
             self.logger.success("配置加载并验证成功！")
 
         except ValidationError as e:
@@ -205,11 +206,15 @@ class Config:
             server_config['base_url'] = env_loader.get('LOCAL_FILE_SERVER_BASE_URL', server_config.get('base_url', ''))
         
         # 日志配置
-        if 'logging' in raw_config:
-            log_config = raw_config['logging']
-            log_config['level'] = env_loader.get('LOG_LEVEL', log_config.get('level', 'DEBUG'))
-            log_config['file_level'] = env_loader.get('LOG_FILE_LEVEL', log_config.get('file_level', 'DEBUG'))
-            log_config['console_level'] = env_loader.get('LOG_CONSOLE_LEVEL', log_config.get('console_level', 'INFO'))
+        if 'logging' in raw_config or env_loader.get('LOG_RETENTION_DAYS'):
+            log_config = raw_config.setdefault('logging', {})
+            if 'logging' in raw_config:
+                log_config['level'] = env_loader.get('LOG_LEVEL', log_config.get('level', 'DEBUG'))
+                log_config['file_level'] = env_loader.get('LOG_FILE_LEVEL', log_config.get('file_level', 'DEBUG'))
+                log_config['console_level'] = env_loader.get('LOG_CONSOLE_LEVEL', log_config.get('console_level', 'INFO'))
+            raw_days = env_loader.get('LOG_RETENTION_DAYS')
+            if raw_days:
+                log_config['retention_days'] = resolve_retention_days(raw_days)
         
         return raw_config
 
