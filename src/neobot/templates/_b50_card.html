@@ -1,0 +1,26 @@
+<article class="nb-card song">
+    <div class="cover-wrap">
+        {% if s.cover %}
+        <img src="data:image/jpeg;base64,{{ s.cover }}" alt="">
+        {% else %}
+        <div class="cover-empty">无封面</div>
+        {% endif %}
+        <span class="badge">{{ "%02d"|format(s.rank) }}</span>
+        <span class="level" style="background: {{ s.level_color }}">{{ s.level|e }}</span>
+        {% if s.badges %}
+        <div class="marks">
+            {% for b in s.badges %}
+            <span class="mark" style="color: {{ b.color }}">{{ b.text|e }}</span>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+    <div class="info">
+        <p class="song-title">{{ s.type|e }} · {{ s.title|e }}</p>
+        <p class="meta">
+            <span class="ra" style="color: {{ s.ra_color }}">{{ s.ra }}</span>
+            定数 {{ "%.1f"|format(s.ds) }} · {{ "%.2f"|format(s.achievements) }}%
+            <span style="color: {{ s.rate_color }}">{{ s.rate|e }}</span>
+        </p>
+    </div>
+</article>

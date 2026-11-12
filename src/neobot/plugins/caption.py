@@ -21,6 +21,8 @@ from neobot.plugin_api import (
     platform_message,
 )
 
+from neobot.render_theme import BODY_RGB, BORDER_RGB, PAGE_BG_RGB, resolve_cjk_font
+
 from .image_refs import image_urls_from_payload, image_urls_from_segments, reply_message_id
 
 logger = ModuleLogger("Caption")
@@ -76,12 +78,12 @@ def wrap_text(text: str, font: ImageFont.ImageFont, max_width: int) -> list[str]
     return lines or [text]
 
 
-def layout_caption(text: str, image_width: int, font_path: str) -> tuple[int, list[str]]:
+def layout_caption(text: str, image_width: int, font_path: str, font_index: int = 0) -> tuple[int, list[str]]:
     width = max(int(image_width * 0.9), 40)
     chosen_size = 16
     chosen_lines = [text]
     for size in range(48, 15, -2):
-        font = ImageFont.truetype(font_path, size=size, index=0)
+        font = ImageFont.truetype(font_path, size=size, index=font_index)
         lines = wrap_text(text, font, width)
         if len(lines) <= 3:
             return size, lines
@@ -90,7 +92,7 @@ def layout_caption(text: str, image_width: int, font_path: str) -> tuple[int, li
     return chosen_size, chosen_lines
 
 
-def render_caption_image(image_bytes: bytes, text: str, font_path: str, max_chars: int = 36) -> bytes:
+def render_caption_image(image_bytes: bytes, text: str, font_path: str, max_chars: int = 36, font_index: int = 0) -> bytes:
     """画上文字后返回 JPEG 字节。
 
     QQ / NapCat 发 JPEG 更稳，体积也比同尺寸 PNG 小。本仓库里其它要发给 QQ 的生成图同样用 JPEG。
@@ -101,19 +103,21 @@ def render_caption_image(image_bytes: bytes, text: str, font_path: str, max_char
     limit = 1600
     if max(image.size) > limit:
         image.thumbnail((limit, limit))
-    size, lines = layout_caption(caption, image.width, font_path)
-    font = ImageFont.truetype(font_path, size=size, index=0)
-    line_height = int(size * 1.35)
-    block = line_height * len(lines) + 24
-    canvas = Image.new("RGBA", (image.width, image.height + block), (0, 0, 0, 0))
+    size, lines = layout_caption(caption, image.width, font_path, font_index=font_index)
+    font = ImageFont.truetype(font_path, size=size, index=font_index)
+    line_height = int(size * 1.7)
+    block = line_height * len(lines) + 28
+    canvas = Image.new("RGBA", (image.width, image.height + block), (*PAGE_BG_RGB, 255))
     canvas.paste(image, (0, 0))
     draw = ImageDraw.Draw(canvas)
-    top = image.height + 8
+    draw.rectangle((0, image.height, image.width, canvas.height), fill=(*PAGE_BG_RGB, 255))
+    draw.line((0, image.height, image.width, image.height), fill=(*BORDER_RGB, 255), width=1)
+    top = image.height + 12
     for index, line in enumerate(lines):
         text_width = font.getlength(line)
-        x = max((image.width - text_width) / 2, 4)
+        x = max((image.width - text_width) / 2, 8)
         y = top + index * line_height
-        draw.text((x, y), line, font=font, fill=(255, 255, 255, 255), stroke_width=2, stroke_fill=(0, 0, 0, 255))
+        draw.text((x, y), line, font=font, fill=(*BODY_RGB, 255))
     output = io.BytesIO()
     canvas.convert("RGB").save(output, format="JPEG", quality=90)
     return output.getvalue()
@@ -141,7 +145,8 @@ async def _reply_image(event: MessageEvent, image_bytes: bytes) -> None:
 async def _caption_and_reply(event: MessageEvent, url: str, text: str) -> None:
     try:
         raw = await _download(url)
-        rendered = render_caption_image(raw, text, str(_FONT), max_chars=_max_chars())
+        font_path, font_index = resolve_cjk_font(str(_FONT))
+        rendered = render_caption_image(raw, text, font_path, max_chars=_max_chars(), font_index=font_index)
     except CaptionError as exc:
         await event.reply(_caption_error_text(exc.code))
         return

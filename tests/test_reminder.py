@@ -20,8 +20,11 @@ class _Redis:
     async def get(self, key):
         return self.kv.get(key)
 
-    async def set(self, key, value, ex=None):
+    async def set(self, key, value, ex=None, nx=False):
+        if nx and key in self.kv:
+            return None
         self.kv[key] = value
+        return True
 
     async def delete(self, *keys):
         for key in keys:
@@ -149,6 +152,107 @@ async def test_user_cap_and_group_switch(monkeypatch):
     event.reply.reset_mock()
     await reminder.handle_reminder(None, event, ["列表"])
     assert "收起来" in event.reply.await_args.args[0]
+
+
+@pytest.mark.asyncio
+async def test_reminder_ids_stay_unique_when_random_collides(monkeypatch):
+    store = _Redis()
+    monkeypatch.setattr(reminder.redis_manager, "_redis", store)
+    monkeypatch.setattr("neobot.plugins.group_manage.is_feature_enabled", _async_true)
+    monkeypatch.setattr(reminder.secrets, "token_hex", lambda _n: "aa11bb")
+    event = _event()
+    await reminder.handle_reminder(None, event, ["30分钟", "喝水"])
+    first = event.reply.await_args.args[0].strip().split()[-1]
+    event.reply.reset_mock()
+    await reminder.handle_reminder(None, event, ["1小时", "伸懒腰"])
+    second = event.reply.await_args.args[0].strip().split()[-1]
+    assert first != second
+    assert await store.get(reminder._item_key(first))
+    assert await store.get(reminder._item_key(second))
+    assert "喝水" in await store.get(reminder._item_key(first))
+    assert "伸懒腰" in await store.get(reminder._item_key(second))
+
+
+@pytest.mark.asyncio
+async def test_send_is_not_repeated_when_redis_update_crashes(monkeypatch):
+    store = _Redis()
+    monkeypatch.setattr(reminder.redis_manager, "_redis", store)
+    monkeypatch.setattr("neobot.plugins.group_manage.is_feature_enabled", _async_true)
+    event = _event()
+    await reminder.handle_reminder(None, event, ["30分钟", "喝水"])
+    reminder_id = event.reply.await_args.args[0].strip().split()[-1]
+    stored = reminder.json.loads(store.kv[reminder._item_key(reminder_id)])
+    due = datetime.fromtimestamp(stored["next_at"], SHANGHAI)
+    sent = []
+
+    async def _send(group_id, user_id, text):
+        sent.append(text)
+
+    async def _crash(*_args, **_kwargs):
+        raise RuntimeError("redis crashed after send")
+
+    monkeypatch.setattr(reminder, "_delete", _crash)
+    with pytest.raises(RuntimeError):
+        await reminder.reminder_tick(due, sender=_send)
+    assert sent == ["喝水"]
+
+    async def _real_delete(client, item):
+        await client.delete(reminder._item_key(item["id"]))
+        await client.srem(reminder._INDEX, item["id"])
+        await client.srem(reminder._user_key(item["user_id"]), item["id"])
+        await client.srem(reminder._group_key(item["group_id"]), item["id"])
+
+    monkeypatch.setattr(reminder, "_delete", _real_delete)
+    assert await reminder.reminder_tick(due, sender=_send) == 0
+    assert sent == ["喝水"]
+
+
+@pytest.mark.asyncio
+async def test_daily_reminder_catches_up_once_on_the_same_day(monkeypatch):
+    store = _Redis()
+    monkeypatch.setattr(reminder.redis_manager, "_redis", store)
+    monkeypatch.setattr("neobot.plugins.group_manage.is_feature_enabled", _async_true)
+    missed = datetime(2026, 11, 11, 21, 0, tzinfo=SHANGHAI)
+    await reminder._save(store, {
+        "id": "daily1",
+        "group_id": 100,
+        "user_id": 7,
+        "text": "互道晚安",
+        "kind": "daily",
+        "hour": 21,
+        "minute": 0,
+        "next_at": int(missed.timestamp()),
+        "fails": 0,
+    })
+    sent = []
+
+    async def _send(group_id, user_id, text):
+        sent.append(text)
+
+    evening = datetime(2026, 11, 12, 22, 0, tzinfo=SHANGHAI)
+    assert await reminder.reminder_tick(evening, sender=_send) == 1
+    assert sent == ["互道晚安"]
+    assert await reminder.reminder_tick(evening, sender=_send) == 0
+    assert sent == ["互道晚安"]
+
+    morning_store = _Redis()
+    monkeypatch.setattr(reminder.redis_manager, "_redis", morning_store)
+    await reminder._save(morning_store, {
+        "id": "daily2",
+        "group_id": 100,
+        "user_id": 7,
+        "text": "互道晚安",
+        "kind": "daily",
+        "hour": 21,
+        "minute": 0,
+        "next_at": int(missed.timestamp()),
+        "fails": 0,
+    })
+    sent.clear()
+    morning = datetime(2026, 11, 12, 10, 0, tzinfo=SHANGHAI)
+    assert await reminder.reminder_tick(morning, sender=_send) == 0
+    kept = await reminder._load(morning_store, "daily2")
+    assert int(kept["next_at"]) == int(datetime(2026, 11, 12, 21, 0, tzinfo=SHANGHAI).timestamp())
 
 
 def _event():

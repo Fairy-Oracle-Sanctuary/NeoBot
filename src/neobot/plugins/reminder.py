@@ -5,6 +5,7 @@ import asyncio
 import json
 import re
 import secrets
+import time
 from datetime import datetime, timedelta
 from typing import Any, Optional
 from zoneinfo import ZoneInfo
@@ -39,6 +40,7 @@ plugin_manifest = define_plugin(
 )
 
 _INDEX = "neobot:reminder:ids"
+_CLAIM_TTL_SECONDS = 3 * 86400
 _task: Optional[asyncio.Task] = None
 
 _LIST = re.compile(r"^(?:列表|清单|list)$", re.IGNORECASE)
@@ -238,6 +240,54 @@ async def _load(client, reminder_id: str) -> Optional[dict]:
     return None
 
 
+async def _set_nx(client, key: str, value: str, ex: Optional[int] = None) -> bool:
+    """占住一个键。键已经存在时返回 False。"""
+    try:
+        if ex is None:
+            result = await client.set(key, value, nx=True)
+        else:
+            result = await client.set(key, value, nx=True, ex=ex)
+    except TypeError:
+        if await client.get(key):
+            return False
+        if ex is None:
+            await client.set(key, value)
+        else:
+            await client.set(key, value, ex=ex)
+        return True
+    return bool(result)
+
+
+def _claim_key(item: dict) -> str:
+    return f"neobot:reminder:fired:{item['id']}:{int(item.get('next_at') or 0)}"
+
+
+async def _claim_occurrence(client, item: dict) -> bool:
+    """发送前先占住这一次。崩溃后下一轮不会再发同一下。"""
+    return await _set_nx(client, _claim_key(item), "1", ex=_CLAIM_TTL_SECONDS)
+
+
+async def _release_occurrence(client, item: dict) -> None:
+    try:
+        await client.delete(_claim_key(item))
+    except Exception:
+        return
+
+
+async def _unique_id(client) -> str:
+    """分配一个还没被占用的编号。随机值撞车时换一个。"""
+    for attempt in range(32):
+        if attempt == 0:
+            candidate = secrets.token_hex(3)
+        else:
+            candidate = f"{secrets.token_hex(2)}{attempt:02x}"
+        if await _set_nx(client, _item_key(candidate), "{}"):
+            return candidate
+    candidate = f"{int(time.time() * 1000):x}{secrets.token_hex(2)}"
+    await client.set(_item_key(candidate), "{}")
+    return candidate
+
+
 async def _save(client, item: dict) -> None:
     await client.set(_item_key(item["id"]), json.dumps(item, ensure_ascii=False))
     await client.sadd(_INDEX, item["id"])
@@ -255,6 +305,23 @@ async def _delete(client, item: dict) -> None:
 async def _ids(client, key: str) -> list[str]:
     members = await client.smembers(key)
     return [_as_text(item) for item in (members or [])]
+
+
+def _scheduled_today(item: dict, moment: datetime) -> datetime:
+    return moment.replace(
+        hour=int(item.get("hour") or 0),
+        minute=int(item.get("minute") or 0),
+        second=0,
+        microsecond=0,
+    )
+
+
+async def _finish_occurrence(client, item: dict, moment: datetime) -> None:
+    if item.get("kind") == "once":
+        await _delete(client, item)
+        return
+    _advance(item, moment)
+    await _save(client, item)
 
 
 def _advance(item: dict, now: datetime) -> None:
@@ -293,8 +360,16 @@ async def reminder_tick(now: Optional[datetime] = None, sender=None) -> int:
             continue
         due = datetime.fromtimestamp(int(item["next_at"]), SHANGHAI)
         if item.get("kind") == "daily" and due.date() < moment.date():
-            _advance(item, moment)
-            await _save(client, item)
+            today_slot = _scheduled_today(item, moment)
+            if today_slot <= moment:
+                # 今天的点已经过了，机器人当时不在。同一天只补一次，不把缺的几天都补上。
+                item["next_at"] = int(today_slot.timestamp())
+            else:
+                _advance(item, moment)
+                await _save(client, item)
+                continue
+        if not await _claim_occurrence(client, item):
+            await _finish_occurrence(client, item, moment)
             continue
         try:
             if sender is None:
@@ -302,6 +377,7 @@ async def reminder_tick(now: Optional[datetime] = None, sender=None) -> int:
             else:
                 await sender(group_id, int(item["user_id"]), item.get("text") or "")
         except Exception as exc:
+            await _release_occurrence(client, item)
             logger.warning(f"[提醒] 发送失败 {reminder_id}: {type(exc).__name__}: {exc}")
             item["fails"] = int(item.get("fails") or 0) + 1
             if item.get("kind") == "once" and item["fails"] >= 3:
@@ -314,11 +390,7 @@ async def reminder_tick(now: Optional[datetime] = None, sender=None) -> int:
                 await _save(client, item)
             continue
         fired += 1
-        if item.get("kind") == "once":
-            await _delete(client, item)
-        else:
-            _advance(item, moment)
-            await _save(client, item)
+        await _finish_occurrence(client, item, moment)
     return fired
 
 
@@ -408,7 +480,7 @@ async def handle_reminder(bot, event, args):
     if group_count >= per_group:
         await event.reply("这个群的提醒本子写满了。")
         return
-    reminder_id = secrets.token_hex(3)
+    reminder_id = await _unique_id(client)
     item = {
         "id": reminder_id,
         "group_id": int(group_id),

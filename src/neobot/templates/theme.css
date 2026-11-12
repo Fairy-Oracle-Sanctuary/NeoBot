@@ -1,0 +1,161 @@
+/* 生成图共用样式。模板在 style 标签里引入本文件。 */
+:root {
+    --nb-page: #f5f6fa;
+    --nb-card: #ffffff;
+    --nb-border: #e5e7eb;
+    --nb-line: #f0f1f4;
+    --nb-title: #2b2f38;
+    --nb-subtitle: #6b7280;
+    --nb-heading: #1f4fd1;
+    --nb-body: #2b2f38;
+    --nb-command: #b4441b;
+    --nb-footnote: #6b7280;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--nb-page);
+}
+
+.nb-page {
+    width: 780px;
+    box-sizing: border-box;
+    background: var(--nb-page);
+    padding: 18px 16px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    color: var(--nb-body);
+    font-family: "Noto Sans CJK SC", "Noto Sans SC", "Source Han Sans SC", sans-serif;
+    font-size: 16.5px;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+}
+
+.nb-page.nb-wide { width: 1280px; }
+.nb-page.nb-narrow { width: 440px; }
+
+.nb-title {
+    margin: 0;
+    font-size: 34px;
+    font-weight: 700;
+    line-height: 1.3;
+    color: var(--nb-title);
+}
+
+.nb-subtitle {
+    margin: 4px 0 0;
+    font-size: 17px;
+    line-height: 1.5;
+    color: var(--nb-subtitle);
+}
+
+.nb-card {
+    background: var(--nb-card);
+    border: 1px solid var(--nb-border);
+    border-radius: 14px;
+    padding: 16px 22px;
+}
+
+.nb-card-title {
+    margin: 0 0 8px;
+    font-size: 21px;
+    font-weight: 700;
+    line-height: 1.4;
+    color: var(--nb-heading);
+}
+
+.nb-body {
+    margin: 0;
+    font-size: 16.5px;
+    line-height: 1.7;
+    color: var(--nb-body);
+}
+
+.nb-cmd {
+    margin: 8px 0 0;
+    font-family: "Noto Sans Mono", ui-monospace, monospace;
+    font-size: 16px;
+    line-height: 1.7;
+    color: var(--nb-command);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.nb-pre {
+    margin: 8px 0 0;
+    font-family: inherit;
+    font-size: 16.5px;
+    line-height: 1.7;
+    color: var(--nb-body);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.nb-footnote {
+    margin: 0;
+    font-size: 14.5px;
+    line-height: 1.6;
+    color: var(--nb-footnote);
+}
+
+.nb-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.nb-table th,
+.nb-table td {
+    padding: 8px 0;
+    border-bottom: 1px solid var(--nb-line);
+    font-size: 16.5px;
+    font-weight: 400;
+    line-height: 1.5;
+    text-align: left;
+    vertical-align: top;
+    color: var(--nb-body);
+}
+
+.nb-table tr:last-child th,
+.nb-table tr:last-child td { border-bottom: none; }
+
+.nb-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+.nb-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--nb-line);
+    font-size: 16.5px;
+    line-height: 1.5;
+}
+
+.nb-row:last-child { border-bottom: none; }
+
+.nb-label { color: var(--nb-subtitle); }
+.nb-value { color: var(--nb-body); text-align: right; }
+
+.nb-tag {
+    display: inline-block;
+    margin: 0 8px 8px 0;
+    padding: 2px 8px;
+    border: 1px solid var(--nb-border);
+    border-radius: 8px;
+    background: var(--nb-card);
+    color: var(--nb-body);
+    font-size: 15px;
+    line-height: 1.6;
+}
+
+.nb-avatar {
+    width: 64px;
+    height: 64px;
+    object-fit: cover;
+    border: 1px solid var(--nb-border);
+    border-radius: 14px;
+    background: var(--nb-card);
+}
