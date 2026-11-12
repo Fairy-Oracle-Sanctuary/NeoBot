@@ -8,7 +8,7 @@ from pathlib import Path
 
 import tomllib
 from pydantic import ValidationError
-from .config_models import ConfigModel, NapCatWSModel, BotModel, RedisModel, DockerModel, ImageManagerModel, MySQLModel, ReverseWSModel, ThreadingModel, BilibiliModel, DouyinModel, JinmanModel, EhentaiModel, DivingFishModel, LocalFileServerModel, DiscordModel, CrossPlatformModel, LoggingModel, McCAdapterModel
+from .config_models import ConfigModel, NapCatWSModel, BotModel, RedisModel, DockerModel, ImageManagerModel, MySQLModel, ReverseWSModel, ThreadingModel, BilibiliModel, DouyinModel, JinmanModel, EhentaiModel, DivingFishModel, LocalFileServerModel, DiscordModel, CrossPlatformModel, LoggingModel, McCAdapterModel, DailyModel
 from .utils.logger import ModuleLogger
 from .utils.exceptions import ConfigError, ConfigNotFoundError, ConfigValidationError
 from .utils.env_loader import env_loader
@@ -240,6 +240,11 @@ class Config:
         获取 Bot 基础配置
         """
         return self._model.bot
+
+    @property
+    def daily(self) -> DailyModel:
+        """获取每日小功能配置。"""
+        return self._model.daily
 
     @property
     def redis(self) -> RedisModel:

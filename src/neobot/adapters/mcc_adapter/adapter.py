@@ -252,13 +252,17 @@ class McpAdapterManager:
     async def get_client(self) -> MccServiceClient:
         """
         返回共享的 MccServiceClient 单例（与所有 adapter 复用同一连接池）。
-        若 mcc_adapter 未启用或尚未初始化，则按当前配置现场创建一个。
+
+        enabled=false 时直接拒绝，不创建 HTTP 客户端，避免去探测已经不存在的 8800 端口。
         """
+        cfg = global_config.mcc_adapter
+        if not cfg.enabled:
+            raise McpAdapterDisabledError(
+                "MCC 未启用（mcc_adapter.enabled=false），已跳过对服务端口的探测"
+            )
         await self._ensure_configured()
         if self._client is not None:
             return self._client
-        # mcc_adapter 未启用时 _ensure_configured 直接返回，_client 仍为 None
-        cfg = global_config.mcc_adapter
         self._client = MccServiceClient(
             service_url=cfg.service_url,
             service_token=cfg.service_token,

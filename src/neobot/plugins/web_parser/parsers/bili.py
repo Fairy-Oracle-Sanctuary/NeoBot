@@ -4,6 +4,7 @@ import re
 import os
 import subprocess
 import tempfile
+from pathlib import Path
 from typing import Optional, Dict, Any, List, Union
 from neobot.plugin_api import logger, input_validator, global_config, download_to_local, get_local_file_server
 from neobot.models import MessageEvent, MessageSegment
@@ -36,6 +37,86 @@ try:
     select_client("aiohttp")
 except Exception as e:
     logger.warning(f"设置 bilibili_api 客户端失败: {e}")
+
+
+def _bili_http_timeout(seconds: float):
+    """aiohttp 3.12+ 的 timeout 必须是 ClientTimeout，传 int 会直接抛 ValueError。"""
+    return aiohttp.ClientTimeout(total=float(seconds))
+
+
+def collect_bili_media_urls(download_url_data: Any) -> List[str]:
+    """
+    从 get_download_url 的原始数据里抽出可下载地址。
+
+    优先 durl（音视频在一个文件里，QQ 能直接播），再是 dash 视频的 baseUrl 与备用地址。
+    主地址经常 403，备用地址往往还能下。
+    """
+    if not isinstance(download_url_data, dict):
+        return []
+    urls: List[str] = []
+
+    def _push(value: Any) -> None:
+        if isinstance(value, str) and value.startswith("http"):
+            urls.append(value)
+        elif isinstance(value, list):
+            for item in value:
+                _push(item)
+
+    durl = download_url_data.get("durl") or []
+    if isinstance(durl, list):
+        for item in durl:
+            if not isinstance(item, dict):
+                continue
+            for key in ("url", "baseUrl", "base_url"):
+                _push(item.get(key))
+            _push(item.get("backup_url") or item.get("backupUrl"))
+
+    dash = download_url_data.get("dash")
+    if isinstance(dash, dict):
+        videos = dash.get("video") or []
+        if isinstance(videos, list):
+            for item in videos:
+                if not isinstance(item, dict):
+                    continue
+                for key in ("baseUrl", "base_url", "url"):
+                    _push(item.get(key))
+                _push(item.get("backupUrl") or item.get("backup_url"))
+
+    seen = set()
+    ordered: List[str] = []
+    for item in urls:
+        if item in seen:
+            continue
+        seen.add(item)
+        ordered.append(item)
+    return ordered
+
+
+def bili_request_headers(credential: Any = None) -> Dict[str, str]:
+    """B 站 CDN 没有 Referer / Cookie 时经常直接 403。"""
+    headers = {
+        "Referer": "https://www.bilibili.com/",
+        "Origin": "https://www.bilibili.com",
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/120.0.0.0 Safari/537.36"
+        ),
+    }
+    if credential is not None and hasattr(credential, "get_cookies"):
+        try:
+            cookies = credential.get_cookies() or {}
+        except Exception:
+            cookies = {}
+        parts = [f"{key}={value}" for key, value in cookies.items() if value]
+        if parts:
+            headers["Cookie"] = "; ".join(parts)
+    return headers
+
+
+def _is_fragment_url(url: str) -> bool:
+    path = url.split("?", 1)[0].lower()
+    return path.endswith(".m4s")
 
 
 class BiliParser(BaseParser):
@@ -166,7 +247,7 @@ class BiliParser(BaseParser):
                 logger.warning(f"[{self.name}] 拒绝访问不安全的 URL: {clean_url[:200]}")
                 return None
 
-            async with session.get(clean_url, headers=self.HEADERS, timeout=5) as response:
+            async with session.get(clean_url, headers=self.HEADERS, timeout=_bili_http_timeout(5)) as response:
                 response.raise_for_status()
                 text = await response.text()
                 
@@ -281,7 +362,7 @@ class BiliParser(BaseParser):
                     short_url,
                     headers=self.HEADERS,
                     allow_redirects=False,
-                    timeout=10,
+                    timeout=_bili_http_timeout(10),
                 ) as response:
                     if response.status in redirect_statuses:
                         location = response.headers.get("Location")
@@ -300,7 +381,7 @@ class BiliParser(BaseParser):
                 short_url,
                 headers=self.HEADERS,
                 allow_redirects=True,
-                timeout=10,
+                timeout=_bili_http_timeout(10),
             ) as response:
                 final_url = str(response.url)
                 if final_url and final_url != short_url:
@@ -338,62 +419,43 @@ class BiliParser(BaseParser):
             if not cid:
                 return None
             
-            # 获取下载链接数据，使用 html5=True 获取网页格式（通常包含合并的音视频）
-            download_url_data = await asyncio.wait_for(
+            # html5=True 通常给出 durl（音视频合一）。主 CDN 地址经常 403，要顺着备用地址试。
+            html5_data = await asyncio.wait_for(
                 v.get_download_url(cid=cid, html5=True), timeout=10
             )
-            
-            # 使用 VideoDownloadURLDataDetecter 解析数据
-            detecter = video.VideoDownloadURLDataDetecter(data=download_url_data)
-            
-            # 尝试获取 MP4 格式的合并流（包含音视频）
-            streams = detecter.detect_best_streams()
-            
-            # 如果没有获取到流，尝试其他格式
-            if not streams:
-                logger.warning(f"[{self.name}] 无法获取 html5 格式，尝试获取其他格式...")
-                download_url_data = await asyncio.wait_for(
+            dash_data = None
+            candidates = collect_bili_media_urls(html5_data)
+            progressive = [item for item in candidates if not _is_fragment_url(item)]
+            if not progressive:
+                logger.info(f"[{self.name}] html5 没有合一地址，改拉 dash 流")
+                dash_data = await asyncio.wait_for(
                     v.get_download_url(cid=cid, html5=False), timeout=10
                 )
-                detecter = video.VideoDownloadURLDataDetecter(data=download_url_data)
-                streams = detecter.detect_best_streams()
-            
-            if streams:
-                # 获取视频直链
-                video_direct_url = streams[0].url
-                
-                # 检查是否是分离的 m4s 流（可能没有声音）
-                is_m4s_stream = '.m4s' in video_direct_url
-                if is_m4s_stream:
-                    logger.warning(f"[{self.name}] 检测到分离的 m4s 流，B站 API 返回的 m4s 流通常是分离的视频和音频，需要客户端合并才能有声音")
-                    logger.info(f"[{self.name}] 建议: 使用支持合并 m4s 流的下载工具（如 ffmpeg）合并视频和音频")
-                
-                logger.info(f"[{self.name}] 获取到视频直链，开始下载到本地...")
-                
-                # B站下载需要 Referer 和 User-Agent
-                headers = {
-                    "Referer": "https://www.bilibili.com",
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                }
-                
-                # 调试：打印 download_url_data 结构
-                logger.debug(f"[{self.name}] download_url_data 类型: {type(download_url_data)}")
-                if isinstance(download_url_data, dict):
-                    logger.debug(f"[{self.name}] download_url_data keys: {list(download_url_data.keys())}")
-                
-                # 如果是 m4s 流且 ffmpeg 可用，先保存 download_url_data 供合并使用
-                if is_m4s_stream and FFMPEG_AVAILABLE and AIOHTTP_AVAILABLE:
-                    local_url = await self._download_and_merge_m4s(video_direct_url, headers, bvid, download_url_data)
-                else:
-                    # 使用本地文件服务器下载
-                    local_url = await download_to_local(video_direct_url, timeout=120, headers=headers)
-                
+                candidates = collect_bili_media_urls(html5_data) + collect_bili_media_urls(dash_data)
+                progressive = [item for item in candidates if not _is_fragment_url(item)]
+
+            headers = bili_request_headers(credential)
+            # 直连：走系统代理时 B 站 CDN 经常 403
+            for media_url in progressive:
+                local_url = await download_to_local(
+                    media_url, timeout=120, headers=headers, trust_env=False
+                )
                 if local_url:
                     logger.success(f"[{self.name}] 视频已下载到本地: {local_url}")
                     return local_url
-                else:
-                    logger.error(f"[{self.name}] 下载到本地失败")
-                    return None
+
+            fragments = [item for item in candidates if _is_fragment_url(item)]
+            merge_source = dash_data if isinstance(dash_data, dict) else html5_data
+            if fragments and FFMPEG_AVAILABLE and AIOHTTP_AVAILABLE and isinstance(merge_source, dict):
+                logger.info(f"[{self.name}] 合一地址下载失败，尝试合并 m4s")
+                local_url = await self._download_and_merge_m4s(
+                    fragments[0], headers, bvid, merge_source
+                )
+                if local_url:
+                    return local_url
+
+            logger.error(f"[{self.name}] 下载到本地失败")
+            return None
                 
         except (aiohttp.ClientError, asyncio.TimeoutError, ValueError, ResponseCodeException) as e:
             logger.error(f"[{self.name}] 获取视频直链失败: {type(e).__name__}: {e}")
@@ -435,7 +497,7 @@ class BiliParser(BaseParser):
                 video_file = tempfile.NamedTemporaryFile(suffix='.m4s', delete=False)
                 video_file.close()
                 
-                async with session.get(video_url, headers=headers, timeout=60) as response:
+                async with session.get(video_url, headers=headers, timeout=_bili_http_timeout(60)) as response:
                     if response.status != 200:
                         logger.error(f"[{self.name}] 下载视频流失败: HTTP {response.status}")
                         return None
@@ -489,7 +551,7 @@ class BiliParser(BaseParser):
                 audio_file = tempfile.NamedTemporaryFile(suffix='.m4s', delete=False)
                 audio_file.close()
                 
-                async with session.get(audio_url, headers=headers, timeout=60) as response:
+                async with session.get(audio_url, headers=headers, timeout=_bili_http_timeout(60)) as response:
                     if response.status != 200:
                         logger.error(f"[{self.name}] 下载音频流失败: HTTP {response.status}")
                         os.unlink(video_file.name)
@@ -547,44 +609,20 @@ class BiliParser(BaseParser):
             
             logger.info(f"[{self.name}] 音视频合并成功: {merged_file.name} ({merged_size} bytes)")
             
-            # 上传合并后的文件到本地文件服务器
             server = get_local_file_server()
+            merged_url = None
             if server and server.site is not None:
                 try:
-                    file_id = server._generate_file_id(f'file://{merged_file.name}')
-                    dest_path = server.download_dir / file_id
-                    
-                    # 获取合并文件大小
-                    merged_size = os.path.getsize(merged_file.name)
-                    logger.debug(f"[{self.name}] 合并文件大小: {merged_size} bytes")
-                    
-                    if merged_size == 0:
-                        logger.error(f"[{self.name}] 合并文件为空，ffmpeg可能失败了")
-                        merged_url = None
-                    else:
-                        # 复制本地文件到服务器目录
-                        import shutil
-                        shutil.copy2(merged_file.name, dest_path)
-                        server.file_map[file_id] = dest_path
-                        
-                        # 验证复制后的文件
-                        if dest_path.exists():
-                            dest_size = dest_path.stat().st_size
-                            logger.debug(f"[{self.name}] 复制后文件大小: {dest_size} bytes")
-                            if dest_size == merged_size:
-                                merged_url = f"{server.base_url}/download?id={file_id}"
-                                logger.success(f"[{self.name}] 合并后的视频已上传到本地服务器: {merged_url}")
-                            else:
-                                logger.error(f"[{self.name}] 文件大小不匹配: 原始 {merged_size} vs 复制 {dest_size}")
-                                merged_url = None
-                        else:
-                            logger.error(f"[{self.name}] 文件复制失败: {dest_path} 不存在")
-                            merged_url = None
+                    merged_url = server.publish_local_file(
+                        Path(merged_file.name),
+                        content_type="video/mp4",
+                        filename="bilibili.mp4",
+                    )
+                    if merged_url:
+                        logger.success(f"[{self.name}] 合并后的视频已上传到本地服务器: {merged_url}")
                 except Exception as e:
                     logger.error(f"[{self.name}] 上传合并文件失败: {e}")
                     merged_url = None
-            else:
-                merged_url = None
             
             # 清理临时文件
             try:
@@ -639,6 +677,7 @@ class BiliParser(BaseParser):
         except Exception:
             pass
 
+        page_url = f"https://www.bilibili.com/video/{data.get('bvid', '')}"
         text_message = (
             f"BiliBili 视频解析\n"
             f"--------------------\n"
@@ -647,6 +686,7 @@ class BiliParser(BaseParser):
             f"--------------------\n"
             f" 标题: {data['title']}\n"
             f" BV号: {data['bvid']}\n"
+            f" 链接: {page_url}\n"
             f" 时长: {format_duration(data['duration'])}\n"
             f"--------------------\n"
             f" 数据:\n"
@@ -658,16 +698,32 @@ class BiliParser(BaseParser):
             f"   弹幕: {self.format_count(data.get('danmaku', 0))}\n"
             f"{avg_line}"
         )
-        
-        image_message_segment = [
-            MessageSegment.text("B站封面："),
-            MessageSegment.image(data['cover_url'])
-        ]
 
-        up_info_segment = [
-            MessageSegment.text("UP主头像："),
-            MessageSegment.image(data['owner_avatar'])
-        ]
+        # 封面/头像走本地中转。直接把 hdslb 链接交给 NapCat 会因没有 Referer 而 403，
+        # 整条合并转发一起失败。下不下来就只留文字，不把防盗链地址塞进消息。
+        image_headers = bili_request_headers(self._get_credential())
+        cover_local = None
+        avatar_local = None
+        if data.get("cover_url"):
+            cover_local = await download_to_local(
+                data["cover_url"], timeout=30, headers=image_headers, trust_env=False
+            )
+        if data.get("owner_avatar"):
+            avatar_local = await download_to_local(
+                data["owner_avatar"], timeout=30, headers=image_headers, trust_env=False
+            )
+
+        image_message_segment = [MessageSegment.text("B站封面：")]
+        if cover_local:
+            image_message_segment.append(MessageSegment.image(cover_local))
+        else:
+            image_message_segment.append(MessageSegment.text("（封面下载失败，请打开链接查看）"))
+
+        up_info_segment = [MessageSegment.text("UP主头像：")]
+        if avatar_local:
+            up_info_segment.append(MessageSegment.image(avatar_local))
+        else:
+            up_info_segment.append(MessageSegment.text(data.get("owner_name") or ""))
 
         # 媒体节点放前面（封面、头像、视频），文字信息放最后
         nodes = [

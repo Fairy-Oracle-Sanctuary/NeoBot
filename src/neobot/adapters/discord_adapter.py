@@ -304,7 +304,7 @@ class DiscordAdapter(discord.Client if DISCORD_AVAILABLE else object):
                             import aiohttp
                             proxy_url = self.proxy if self.proxy else None
                             async with aiohttp.ClientSession() as session:
-                                async with session.get(attachment_url, proxy=proxy_url, timeout=30) as response:
+                                async with session.get(attachment_url, proxy=proxy_url, timeout=aiohttp.ClientTimeout(total=30)) as response:
                                     content_bytes = await response.read()
                                     
                             if not filename:

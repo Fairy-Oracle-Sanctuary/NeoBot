@@ -271,8 +271,17 @@ class BaseParser(metaclass=abc.ABCMeta):
             # 格式化响应
             response = await self.format_response(event, data)
             if response:
-                # 发送响应
-                await event.bot.send_forwarded_messages(target=event, nodes=response)
+                try:
+                    await event.bot.send_forwarded_messages(target=event, nodes=response)
+                except Exception as send_error:
+                    # 合并转发/媒体上传失败时，文字摘要仍然要进群
+                    logger.warning(
+                        f"[{self.name}] 合并转发发送失败，改为文字摘要: "
+                        f"{type(send_error).__name__}: {send_error}"
+                    )
+                    from .utils import summarize_forward_nodes
+                    summary = summarize_forward_nodes(response, page_url=real_url or url)
+                    await event.reply(summary)
             else:
                 await self.reply_with_error_cooldown(event, "解析成功，但无法生成响应。")
                 

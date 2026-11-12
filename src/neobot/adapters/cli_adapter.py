@@ -101,7 +101,7 @@ class MockBot(Bot):
 
     # ── 重写核心方法 ──────────────────────────────────
 
-    async def call_api(self, action: str, params: Optional[Dict[str, Any]] = None) -> Any:
+    async def call_api(self, action: str, params: Optional[Dict[str, Any]] = None, strict: bool = False) -> Any:
         """拦截所有 API 调用，格式化输出到终端。"""
         params = params or {}
         await self._display(action, params)

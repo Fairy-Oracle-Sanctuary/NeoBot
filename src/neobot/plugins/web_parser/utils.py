@@ -128,6 +128,43 @@ def normalize_url(url: str) -> str:
     return url
 
 
+def summarize_forward_nodes(nodes: List[Any], page_url: str = "") -> str:
+    """
+    合并转发发不出去时，把节点里的文字收成一条普通消息。
+
+    媒体段不展开成会过期的 CDN 直链，只留页面链接，保证解析结果仍能进群。
+    """
+    texts: List[str] = []
+    media_count = 0
+    for node in nodes or []:
+        content = node.get("data", {}).get("content") if isinstance(node, dict) else None
+        pieces = content if isinstance(content, list) else [content]
+        for piece in pieces:
+            if isinstance(piece, str):
+                if piece.strip():
+                    texts.append(piece.strip())
+                continue
+            if not isinstance(piece, dict):
+                continue
+            kind = piece.get("type")
+            data = piece.get("data") or {}
+            if kind == "text":
+                text = str(data.get("text") or "").strip()
+                if text:
+                    texts.append(text)
+            elif kind in ("image", "video", "record", "file"):
+                media_count += 1
+
+    body = "\n".join(texts)
+    page_url = (page_url or "").strip()
+    if page_url and page_url not in body:
+        body = f"{body}\n链接: {page_url}".strip()
+    if media_count:
+        note = f"（{media_count} 个媒体没发出去，打开链接即可查看）"
+        body = f"{body}\n{note}".strip()
+    return body or "解析完成，但消息发送失败。请稍后再试。"
+
+
 def validate_url(url: str) -> bool:
     """
     验证URL格式是否正确

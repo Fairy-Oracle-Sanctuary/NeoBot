@@ -10,6 +10,10 @@ reconnect_interval = 5
 command = ["/"]
 ignore_self_message = true
 permission_denied_message = "权限不足，需要 {permission_name} 权限"
+# 别的机器人的指令。看到这些名字保持沉默，不要回复「你是不是想用 …」
+unknown_command_ignore = ["今日猪猪", "我的猪圈"]
+# 同一群两次未知指令提示的最小间隔（秒）
+unknown_command_hint_interval = 60
 
 [redis]
 host = "localhost"
@@ -81,12 +85,17 @@ timeout = 30
 cookie = ""
 
 [local_file_server]
+# 生产若要中转视频/图片给 NapCat，设为 true。CI / 无 NapCat 的环境保持 false。
 enabled = false
+# 必须是 0.0.0.0。NeoBot 走 host 网络，NapCat 在独立容器 wb-napcat 里，
+# 只监听 127.0.0.1 时容器访问不到这个端口。
 host = "0.0.0.0"
 port = 3003
-# NapCat 访问本文件服务器的地址（用于合并转发等场景的视频/图片下载）
-# 留空 = http://127.0.0.1:3003，适用于 NapCat 与 NeoBot 同机且 NapCat 为 host 网络；
-# 若 NapCat 是独立容器，填宿主机可达地址，如 http://192.168.1.100:3003
+# NapCat 拉取文件用的根地址。留空时：能看到 docker0 就用它（常见是 http://172.17.0.1:3003），
+# 否则用 http://127.0.0.1:3003（仅当 NapCat 与本进程在同一网络命名空间）。
+# 不要填 http://127.0.0.1:3003 —— 那是 NapCat 容器自己的回环，会拉不到文件。
+# 自定义网络时写成容器能访问的地址，例如 http://192.168.1.100:3003
+# 下载接口不校验额外 token：NapCat 只会 GET 这个 URL，带了鉴权头反而会 403。
 base_url = ""
 
 [discord]
@@ -95,6 +104,12 @@ token = ""
 
 [cross_platform]
 enabled = false
+
+[daily]
+# /今日运势 的盐。换掉会使同一天的结果改变。不是密钥，可以留空。
+salt = ""
+# /今天吃什么 的菜单。留空（foods = []）则使用插件内置的一份。
+foods = ["番茄炒蛋", "味噌拉面", "葱油拌面", "小笼包"]
 
 [logging]
 # 长期运行时建议用 INFO：DEBUG 会把每条消息、每个事件都写进文件，磁盘增长很快
@@ -105,6 +120,8 @@ console_level = "INFO"
 retention_days = 7
 
 [mcc_adapter]
+# 8800 上的 mcc-service 已下线。保持 false：适配器不会启动，也不会去探测该端口。
+# 若生产 config.toml 里写成了 true，请改回 false，否则日志会持续出现「MCC 服务不可达」。
 enabled = false
 service_url = "http://127.0.0.1:8800"
 service_token = "replace-me"

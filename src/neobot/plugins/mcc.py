@@ -40,8 +40,15 @@ plugin_manifest = define_plugin(
 
 # ── 登录签发（内部复用，注册到 /mcc 登录）──────────────────────
 
+def _mcc_disabled_text() -> str:
+    return "MCC 已关闭（配置 mcc_adapter.enabled = false），不会连接 8800 端口。"
+
+
 async def _do_login(bot, event: MessageEvent, reason: str = "") -> None:
     """签发一次性登录密钥（原独立 /登录 逻辑，现由 /mcc 登录 调用）。"""
+    if not global_config.mcc_adapter.enabled:
+        await event.reply(_mcc_disabled_text())
+        return
     if event.message_type != "private":
         await event.reply("❌ 登录仅支持私聊使用，请私聊机器人发送：/mcc 登录")
         return
@@ -98,6 +105,9 @@ async def _do_login(bot, event: MessageEvent, reason: str = "") -> None:
 async def handle_ag_command(bot, event: MessageEvent, args: list):
     """/ag <查询>：只读查询，固定 public 实例。"""
     task = " ".join(args).strip()
+    if not global_config.mcc_adapter.enabled:
+        await event.reply(_mcc_disabled_text())
+        return
     if not task:
         await event.reply(
             "用法：/ag <要查询的内容>\n"
@@ -149,6 +159,10 @@ async def handle_mcc_command(bot, event: MessageEvent, args: list):
     # ── 登录：签发网页登录密钥 ─────────────────────────────
     if sub0_lower in ("登录", "login", "login_token"):
         await _do_login(bot, event)
+        return
+
+    if not global_config.mcc_adapter.enabled and sub0_lower in ("agent", "智能", "ai", "query", "查询"):
+        await event.reply(_mcc_disabled_text())
         return
 
     # ── agent：只读查询（与 /ag 同一实现）──────────────────

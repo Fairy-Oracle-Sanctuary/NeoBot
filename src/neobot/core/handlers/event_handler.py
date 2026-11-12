@@ -16,6 +16,19 @@ from ..utils.executor import run_in_thread_pool
 from ..utils.logger import logger, ModuleLogger
 from ..managers.redis_manager import redis_manager
 from neobot.core.managers.permission_manager import permission_manager
+from .unknown_command import HintRateLimiter, suggest_command
+
+
+def raw_message_text(event: Any) -> str:
+    """取出原始消息文本。非字符串（例如测试里的 Mock）按空串处理，避免下标访问崩溃。"""
+    raw = getattr(event, "raw_message", "")
+    if isinstance(raw, str):
+        return raw
+    return ""
+
+
+def raw_message_preview(event: Any, limit: int = 80) -> str:
+    return raw_message_text(event)[:limit]
 
 
 class BaseHandler(ABC):
@@ -78,6 +91,7 @@ class MessageHandler(BaseHandler):
         # 平台感知分发（阶段 2/3）：platform -> handlers / commands
         self.platform_handlers: Dict[str, List[Dict[str, Any]]] = {}
         self.platform_commands: Dict[str, Dict[str, Dict]] = {}
+        self._hint_limiter = HintRateLimiter()
 
     def clear(self):
         """
@@ -222,7 +236,7 @@ class MessageHandler(BaseHandler):
             key=lambda h: h.get("priority", 10),
         )
         dispatch_logger = ModuleLogger("EventDispatch")
-        dispatch_logger.debug(f"[EventDispatch:TRACE] 开始分发消息事件: raw='{event.raw_message[:80] if event.raw_message else ''}', handlers={len(sorted_handlers)}")
+        dispatch_logger.debug(f"[EventDispatch:TRACE] 开始分发消息事件: raw='{raw_message_preview(event)}', handlers={len(sorted_handlers)}")
 
         for handler_info in sorted_handlers:
             consumed = await self._run_handler(handler_info["func"], bot, event)
@@ -233,15 +247,15 @@ class MessageHandler(BaseHandler):
                     dispatch_logger.warning(
                         f"[EventDispatch] handler 阻断事件分发: plugin={handler_info['plugin_name']}, "
                         f"priority={handler_info.get('priority', 10)}, "
-                        f"raw_message='{event.raw_message[:80] if event.raw_message else ''}'"
+                        f"raw_message='{raw_message_preview(event)}'"
                     )
                 return
 
-        if not event.raw_message:
+        raw_text = raw_message_text(event).strip()
+        if not raw_text:
             dispatch_logger.debug("[EventDispatch:TRACE] 无 raw_message，跳过命令匹配")
             return
 
-        raw_text = event.raw_message.strip()
         prefix_found = next((p for p in self.prefixes if raw_text.startswith(p)), None)
 
         if not prefix_found:
@@ -293,10 +307,12 @@ class MessageHandler(BaseHandler):
         else:
             dispatch_logger.debug(f"[EventDispatch:TRACE] 命令未注册: /{command_name}")
             # 阶段 2/3：QQ 平台已迁移到 CommandContext 的指令（mcc 等）在这里桥接
-            if self.platform_commands.get("qq"):
+            if self.platform_commands.get("qq") or self.platform_commands.get(""):
                 from neobot.core.messaging.context import CommandContext
                 ctx = CommandContext.from_onebot_event(event, bot)
                 await self._dispatch_platform_commands(ctx)
+            else:
+                await self._maybe_unknown_hint(bot, event, command_name, platform="qq")
 
     async def handle_platform(self, ctx: Any):
         """
@@ -306,7 +322,7 @@ class MessageHandler(BaseHandler):
         dispatch_logger = ModuleLogger("EventDispatch")
         dispatch_logger.debug(
             f"[PlatformDispatch:TRACE] platform={getattr(ctx, 'platform', '?')}, "
-            f"raw='{(getattr(ctx, 'raw_message', '') or '')[:80]}'"
+            f"raw='{raw_message_preview(ctx)}'"
         )
 
         handlers = list(self.platform_handlers.get(getattr(ctx, "platform", ""), []))
@@ -317,7 +333,7 @@ class MessageHandler(BaseHandler):
             if consumed or handler_info.get("block", False):
                 return
 
-        raw_text = (getattr(ctx, "raw_message", "") or "").strip()
+        raw_text = raw_message_text(ctx).strip()
         prefix_found = next((p for p in self.prefixes if raw_text.startswith(p)), None)
         if not prefix_found:
             return
@@ -328,7 +344,7 @@ class MessageHandler(BaseHandler):
         dispatch_logger = ModuleLogger("EventDispatch")
 
         if not raw_text:
-            raw_text = (getattr(ctx, "raw_message", "") or "").strip()
+            raw_text = raw_message_text(ctx).strip()
         if not prefix_found:
             prefix_found = next((p for p in self.prefixes if raw_text.startswith(p)), None)
         if not prefix_found:
@@ -345,6 +361,12 @@ class MessageHandler(BaseHandler):
         )
         if not command_info:
             dispatch_logger.debug(f"[PlatformDispatch] 平台 {platform} 未注册指令 /{command_name}")
+            await self._maybe_unknown_hint(
+                getattr(ctx, "bot", None),
+                ctx,
+                command_name,
+                platform=platform or "qq",
+            )
             return
 
         func = command_info["func"]
@@ -359,6 +381,39 @@ class MessageHandler(BaseHandler):
                 return
 
         await self._run_handler(func, ctx.bot, ctx, args=args, permission_granted=True)
+
+    def _known_command_names(self, platform: str) -> List[str]:
+        names = set(self.commands)
+        names.update(self.platform_commands.get(platform, {}))
+        names.update(self.platform_commands.get("", {}))
+        return list(names)
+
+    async def _maybe_unknown_hint(self, bot: Any, event: Any, command_name: str, platform: str = "qq") -> None:
+        """接近已有指令时给一句提示；忽略名单或差得远则不说话。同一群有冷却。"""
+        try:
+            ignore = list(global_config.bot.unknown_command_ignore)
+            interval = float(global_config.bot.unknown_command_hint_interval)
+        except Exception:
+            from .unknown_command import DEFAULT_IGNORE
+            ignore = list(DEFAULT_IGNORE)
+            interval = 60.0
+        suggestion = suggest_command(command_name, self._known_command_names(platform), ignore)
+        if not suggestion:
+            return
+        group_id = getattr(event, "group_id", None)
+        if group_id:
+            key = f"group:{group_id}"
+        else:
+            key = f"user:{getattr(event, 'user_id', 0)}"
+        if not self._hint_limiter.allow(key, interval):
+            return
+        text = f"你是不是想用 /{suggestion} ？"
+        reply = getattr(event, "reply", None)
+        if reply is not None:
+            await reply(text)
+            return
+        if bot is not None:
+            await bot.send(event, text)
 
 
 class NoticeHandler(BaseHandler):

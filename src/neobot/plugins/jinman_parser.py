@@ -158,7 +158,7 @@ async def fetch_album_info(album_id: str) -> Optional[dict]:
     url = f"{api_base}/album/{album_id}"
     try:
         session = await _get_session()
-        async with session.get(url, timeout=15) as response:
+        async with session.get(url, timeout=aiohttp.ClientTimeout(total=15)) as response:
             if response.status != 200:
                 return None
             data = await response.json(content_type=None)

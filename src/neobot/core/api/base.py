@@ -71,7 +71,7 @@ class BaseAPI:
         
         return str(message)
 
-    async def call_api(self, action: str, params: Optional[Dict[str, Any]] = None) -> Any:
+    async def call_api(self, action: str, params: Optional[Dict[str, Any]] = None, strict: bool = False) -> Any:
         """
         调用 OneBot v11 API，并提供统一的日志和异常处理。
 
@@ -129,10 +129,19 @@ class BaseAPI:
             truncate_base64_recursive(log_response)
             logger.debug(f"API响应 <- {log_response}")
 
-            if response.get("status") == "failed":
+            status = response.get("status") if isinstance(response, dict) else None
+            retcode = response.get("retcode") if isinstance(response, dict) else None
+            # retcode 0 成功，1 表示异步已接受（OneBot）
+            failed = status == "failed" or (
+                isinstance(retcode, int) and retcode not in (0, 1)
+            )
+            if failed:
                 logger.warning(f"API调用失败: {response}")
-            
-            return response.get("data")
+                if strict:
+                    from ..utils.exceptions import OneBotApiError
+                    raise OneBotApiError(action, response if isinstance(response, dict) else {})
+
+            return response.get("data") if isinstance(response, dict) else None
 
         except Exception as e:
             logger.error(f"API调用异常: action={action}, params={params}, error={e}")

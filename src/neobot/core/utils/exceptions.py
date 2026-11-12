@@ -209,6 +209,23 @@ class BrowserPoolError(BrowserManagerError):
     pass
 
 
+class OneBotApiError(Exception):
+    """OneBot API 返回失败状态（例如合并转发上传失败）。"""
+
+    def __init__(self, action: str, response: dict):
+        self.action = action
+        self.response = response if isinstance(response, dict) else {}
+        detail = (
+            self.response.get("message")
+            or self.response.get("wording")
+            or self.response.get("msg")
+            or self.response.get("retcode")
+            or self.response.get("status")
+        )
+        self.message = f"{action} 失败: {detail}"
+        super().__init__(self.message)
+
+
 class CodeExecutionError(Exception):
     """
     代码执行相关错误的基类。

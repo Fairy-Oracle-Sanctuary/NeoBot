@@ -179,7 +179,7 @@ async def fetch_comic_info(comic_id: str) -> Optional[dict]:
         headers["Cookie"] = cookie
     try:
         session = await _get_session()
-        async with session.get(url, headers=headers, timeout=15) as response:
+        async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=15)) as response:
             if response.status != 200:
                 logger.error(f"[EhentaiParser] 获取画廊详情失败 HTTP {response.status}: {comic_id}")
                 return None
@@ -210,7 +210,7 @@ async def fetch_photo_chapter(comic_id: str, chapter: int) -> Optional[List[str]
         headers["Cookie"] = cookie
     try:
         session = await _get_session()
-        async with session.get(url, headers=headers, timeout=15) as response:
+        async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=15)) as response:
             if response.status != 200:
                 logger.error(f"[EhentaiParser] 获取章节图片失败 HTTP {response.status}: {comic_id}/{chapter}")
                 return None
@@ -256,7 +256,7 @@ async def _download_one_image(session: aiohttp.ClientSession, url: str, sem: asy
     """下载单张图片（并发受限），失败返回 None。"""
     async with sem:
         try:
-            async with session.get(url, timeout=30) as response:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as response:
                 if response.status != 200:
                     return None
                 return await response.read()

@@ -342,3 +342,23 @@ docker compose build --no-cache
 **无法连接宿主机上的 NapCat / Redis**
 
 确认使用 host 网络模式，并检查对应服务是否监听在 `127.0.0.1`；或改用 bridge 模式 + 环境变量指定宿主机 IP（见上文 c 节）。
+
+## 8. 已有生产配置要改的项
+
+生产配置在服务器的 `/opt/neobot/config.toml`，不在镜像里。拉新镜像后按下面核对，缺的键会用代码里的默认值。
+
+**本地文件服务**（链接解析要把视频/图片交给容器 `wb-napcat`）
+
+- `[local_file_server] enabled = true`（要用中转时）
+- `host = "0.0.0.0"`。只监听 `127.0.0.1` 时，NapCat 容器访问不到。
+- `base_url` 留空。程序会在能看到 `docker0` 时用桥地址（常见 `http://172.17.0.1:3003`）。不要写成 `http://127.0.0.1:3003`，那是 NapCat 容器自己的回环。
+- 下载地址不带额外 token。NapCat 只会 GET，加了鉴权头会得到 403。
+
+**MCC**
+
+- `[mcc_adapter] enabled = false`。8800 上的服务已经不在，设成 true 会一直探测并打「MCC 服务不可达」。代码还在，只是默认不启动。
+
+**每日小功能与未知指令**（可不改，默认即可）
+
+- `[daily] salt` 留空即可；`foods` 留空用内置菜单，想换菜就写成字符串数组。
+- `[bot] unknown_command_ignore` 默认包含 `今日猪猪` 和 `我的猪圈`，这两条不会得到提示。`unknown_command_hint_interval` 默认 60 秒。

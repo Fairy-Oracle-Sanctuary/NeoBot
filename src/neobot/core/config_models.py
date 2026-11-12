@@ -24,6 +24,23 @@ class BotModel(BaseModel):
     command: List[str] = Field(default_factory=lambda: ["/"])
     ignore_self_message: bool = True
     permission_denied_message: str = "权限不足，需要 {permission_name} 权限"
+    # 这些名字是别的机器人的指令，看到了保持沉默，不要提示「你是不是想用」
+    unknown_command_ignore: List[str] = Field(
+        default_factory=lambda: ["今日猪猪", "我的猪圈"]
+    )
+    # 同一群两次未知指令提示的最小间隔（秒）
+    unknown_command_hint_interval: int = 60
+
+
+class DailyModel(BaseModel):
+    """
+    对应 `config.toml` 中的 `[daily]` 配置块。
+
+    /今日运势 按用户和日期确定；/今天吃什么 从 foods 里随机。
+    foods 留空时使用插件内置菜单。
+    """
+    salt: str = ""
+    foods: List[str] = Field(default_factory=list)
 
 class ReverseWSModel(BaseModel):
     """
@@ -296,3 +313,4 @@ class ConfigModel(BaseModel):
     cross_platform: CrossPlatformModel = Field(default_factory=CrossPlatformModel)
     logging: LoggingModel = Field(default_factory=LoggingModel)
     mcc_adapter: McCAdapterModel = Field(default_factory=McCAdapterModel)
+    daily: DailyModel = Field(default_factory=DailyModel)
