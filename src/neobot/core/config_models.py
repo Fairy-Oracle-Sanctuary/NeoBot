@@ -128,6 +128,32 @@ class DailyCpModel(BaseModel):
     """/今日CP 的盐。换掉会使同一天的配对改变。不是密钥。"""
     salt: str = ""
 
+
+class DailyNewsSourceModel(BaseModel):
+    """一条早报来源。category 只能是 international 或 domestic。"""
+    name: str = ""
+    url: str = ""
+    category: str = "domestic"
+
+
+class DailyNewsModel(BaseModel):
+    """
+    每天早上向指定群推送早报。默认关闭。
+
+    groups 留空表示不发。真实群号只放在服务器的 config.toml。
+    sources 留空时，插件使用内置的中新网 RSS。
+    """
+    enabled: bool = False
+    groups: List[int] = Field(default_factory=list)
+    time: str = "08:00"
+    timezone: str = "Asia/Shanghai"
+    max_items_international: int = 8
+    max_items_domestic: int = 6
+    sources: List[DailyNewsSourceModel] = Field(default_factory=list)
+    request_timeout: int = 12
+    send_as_forward: bool = True
+    manual_cooldown_seconds: int = 600
+
 class ReverseWSModel(BaseModel):
     """
     对应 `config.toml` 中的 `[reverse_ws]` 配置块。
@@ -456,3 +482,4 @@ class ConfigModel(BaseModel):
     e926: E926Model = Field(default_factory=E926Model)
     music: MusicModel = Field(default_factory=MusicModel)
     daily_cp: DailyCpModel = Field(default_factory=DailyCpModel)
+    daily_news: DailyNewsModel = Field(default_factory=DailyNewsModel)
