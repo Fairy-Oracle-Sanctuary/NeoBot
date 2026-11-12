@@ -73,6 +73,19 @@ async def generate_and_send_code_image(event: MessageEvent, input_code: str, out
         # 降级为文本消息
         await event.reply(f"--- 你的代码 ---\n{input_code}\n--- 执行结果 ---\n{output_result}")
 
+async def sandbox_ready(event: MessageEvent) -> bool:
+    """沙箱没开或 Docker 不在时，给一句好懂的回复。"""
+    code_executor = getattr(event.bot, "code_executor", None)
+    if code_executor is None or getattr(code_executor, "enabled", False) is not True:
+        await event.reply("代码沙箱歇着呢，现在不能跑 /py。")
+        return False
+    ready = await code_executor.ensure_ready()
+    if not ready:
+        await event.reply("沙箱想开工，但没连上 Docker，这次先不跑啦。")
+        return False
+    return True
+
+
 async def execute_code(event: MessageEvent, code: str):
     """
     核心代码执行逻辑。
@@ -81,10 +94,9 @@ async def execute_code(event: MessageEvent, code: str):
         event (MessageEvent): 消息事件对象
         code (str): 要执行的Python代码
     """
-    code_executor = getattr(event.bot, 'code_executor', None)
-    if not code_executor or not code_executor.docker_client:
-        await event.reply("代码执行服务当前不可用，请检查 Docker 连接配置。")
+    if not await sandbox_ready(event):
         return
+    code_executor = event.bot.code_executor
 
     # 定义一个包装回调函数，确保正确处理异步操作和异常
     async def callback_wrapper(result):
@@ -374,6 +386,9 @@ async def code_py_main(event: MessageEvent, args: list[str]):
     - 如果有参数，直接执行。
     - 如果没有参数，开启多行输入模式。
     """
+    if not await sandbox_ready(event):
+        return
+
     code_to_run = " ".join(args)
 
     if code_to_run:
@@ -411,6 +426,10 @@ async def handle_multi_line_code(event: MessageEvent):
     # 使用 getattr 兼容私聊和群聊
     session_key = (event.user_id, getattr(event, 'group_id', 'private'))
     if session_key in multi_line_sessions:
+        if not await sandbox_ready(event):
+            multi_line_sessions[session_key].cancel()
+            del multi_line_sessions[session_key]
+            return True
         # 权限校验：仅管理员可执行代码（防御权限降级等边界情况）
         if not await permission_manager.check_permission(event.user_id, Permission.ADMIN):
             multi_line_sessions[session_key].cancel()

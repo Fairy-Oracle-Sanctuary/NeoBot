@@ -82,7 +82,7 @@ async def handle_github_command(bot, event: MessageEvent):
         from .parse_stats import record_parse
         _start = _time.monotonic()
         try:
-            await github_parser.process_url(event, repo_url)
+            await github_parser.process_url(event, repo_url, use_dedupe=False)
         finally:
             try:
                 await record_parse("github", (_time.monotonic() - _start) * 1000)

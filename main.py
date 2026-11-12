@@ -187,19 +187,17 @@ async def main():
 
     websocket_client = None
     try:
-        # 初始化代码执行器
+        # 代码沙箱默认关闭。开启后也要等第一次 /py 才连接 Docker，
+        # 避免没有套接字的生产环境在启动时刷错误。
         code_executor = initialize_executor(config)
         
         # 初始化 WebSocket 客户端
         websocket_client = WS(code_executor=code_executor)
 
-        # 启动代码执行器的后台 worker
-        logger.debug("[Main] 检查是否需要启动代码执行 Worker...")
-        if code_executor and code_executor.docker_client:
-            logger.info("[Main] Docker 连接成功，正在启动代码执行 Worker...")
-            asyncio.create_task(code_executor.worker())
+        if code_executor and code_executor.enabled:
+            logger.info("[Main] 代码沙箱已启用，第一次 /py 时再连接 Docker。")
         else:
-            logger.warning("[Main] 未启动代码执行 Worker，因为 Docker 客户端未初始化或连接失败。")
+            logger.info("[Main] 代码沙箱未启用，跳过 Docker。")
 
         await websocket_client.connect()
     except asyncio.CancelledError:

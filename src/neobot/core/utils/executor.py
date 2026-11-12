@@ -4,7 +4,7 @@ import docker
 from docker.tls import TLSConfig
 from docker.types import LogConfig
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 from neobot.core.utils.logger import logger
 
@@ -29,38 +29,71 @@ class CodeExecutor:
         
         self.concurrency_limit = asyncio.Semaphore(concurrency)
         self.docker_client = None
+        self._connect_failed = False
+        self._worker_task: Optional[asyncio.Task] = None
+        code_py = getattr(config, "code_py", None)
+        enabled = getattr(code_py, "enabled", False) if code_py is not None else False
+        # 只接受真正的布尔值，避免测试里的 MagicMock 被当成已开启
+        self.enabled = enabled is True
+        self._tls_verify = bool(getattr(docker_config, "tls_verify", False))
+        self._ca_cert = getattr(docker_config, "ca_cert_path", None)
+        self._client_cert = getattr(docker_config, "client_cert_path", None)
+        self._client_key = getattr(docker_config, "client_key_path", None)
         # 专用线程池：Docker 容器执行是阻塞操作，且超时后线程仍会继续运行，
         # 使用独立线程池可避免占满默认线程池（否则其他 run_in_executor 任务会被饿死）
         self._executor = ThreadPoolExecutor(
             max_workers=max(concurrency, 1),
             thread_name_prefix="neobot-code-exec",
         )
+        if self.enabled:
+            logger.info("[CodeExecutor] 代码沙箱已启用，将在第一次 /py 时连接 Docker。")
+        else:
+            logger.info("[CodeExecutor] 代码沙箱未启用，启动时不连接 Docker。")
 
-        logger.info("[CodeExecutor] 初始化 Docker 客户端...")
+    def ensure_client(self) -> bool:
+        """需要跑代码时才连接 Docker。未启用或上次已经失败则直接返回。"""
+        if not self.enabled:
+            return False
+        if self.docker_client is not None:
+            return True
+        if self._connect_failed:
+            return False
+        logger.info("[CodeExecutor] 正在连接 Docker...")
         try:
             if self.docker_base_url:
-                # 如果配置了远程 Docker 地址，则使用 TLS 选项进行连接
                 tls_config = None
-                if docker_config.tls_verify:
+                if self._tls_verify:
                     tls_config = TLSConfig(
-                        ca_cert=docker_config.ca_cert_path,
-                        client_cert=(docker_config.client_cert_path, docker_config.client_key_path),
-                        verify=True
+                        ca_cert=self._ca_cert,
+                        client_cert=(self._client_cert, self._client_key),
+                        verify=True,
                     )
                 self.docker_client = docker.DockerClient(base_url=self.docker_base_url, tls=tls_config)
             else:
-                # 否则，使用默认的本地环境连接
                 self.docker_client = docker.from_env()
-
-            # 检查 Docker 服务是否可用
             self.docker_client.ping()
-            logger.success("[CodeExecutor] Docker 客户端初始化成功，服务连接正常。")
+            logger.success("[CodeExecutor] Docker 客户端连接成功。")
+            return True
         except docker.errors.DockerException as e:
             self.docker_client = None
-            logger.error(f"无法连接到 Docker 服务，请检查 Docker 是否正在运行: {e}")
+            self._connect_failed = True
+            logger.warning(f"[CodeExecutor] 使用 /py 时没能连上 Docker: {e}")
+            return False
         except Exception as e:
             self.docker_client = None
-            logger.error(f"初始化 Docker 客户端时发生未知错误: {e}")
+            self._connect_failed = True
+            logger.warning(f"[CodeExecutor] 连接 Docker 时发生未知错误: {e}")
+            return False
+
+    async def ensure_ready(self) -> bool:
+        """连上 Docker，并在当前事件循环里拉起执行队列。"""
+        loop = asyncio.get_running_loop()
+        ok = await loop.run_in_executor(None, self.ensure_client)
+        if not ok:
+            return False
+        if self._worker_task is None or self._worker_task.done():
+            self._worker_task = asyncio.create_task(self.worker())
+        return True
 
     async def add_task(self, code: str, callback: Callable[[str], asyncio.Future]):
         """

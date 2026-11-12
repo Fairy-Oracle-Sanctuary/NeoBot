@@ -210,16 +210,18 @@ class BaseParser(metaclass=abc.ABCMeta):
             
         return None
     
-    async def process_url(self, event: MessageEvent, url: str):
+    async def process_url(self, event: MessageEvent, url: str, *, use_dedupe: bool = True):
         """
         处理URL，获取信息并回复。
 
         短链接解析与信息解析各自最多尝试 max_parse_attempts 次，
-        全部失败后才回复错误提示。
+        全部失败后才回复错误提示。命中缓存时不再请求上游。
+        同一群在去重窗口内重复贴同一个链接时，不再解析也不再发送。
         
         Args:
             event (MessageEvent): 消息事件对象
             url (str): 待处理的URL
+            use_dedupe (bool): 自动解析为 True。手动指令可关掉，方便再看一次。
         """
         try:
             # 检查是否是短链接
@@ -241,40 +243,52 @@ class BaseParser(metaclass=abc.ABCMeta):
                     await self.reply_with_error_cooldown(event, "无法解析短链接。")
                     return
             
-            # 解析URL（最多尝试 max_parse_attempts 次）
-            data = None
-            parse_start = time.monotonic()
-            for attempt in range(1, self.max_parse_attempts + 1):
-                data = await self.parse(real_url)
-                if data:
-                    break
-                if attempt < self.max_parse_attempts:
-                    delay = self._retry_delays[min(attempt - 1, len(self._retry_delays) - 1)]
-                    logger.warning(
-                        f"[{self.name}] 信息解析第 {attempt}/{self.max_parse_attempts} 次失败，"
-                        f"{delay:.0f}s 后重试"
-                    )
-                    await asyncio.sleep(delay)
+            from .link_cache import get_link_cache
+            cache = get_link_cache()
+            norm = cache.normalize(real_url or url)
+            scope = cache.scope_for(event)
+            if use_dedupe and norm and await cache.seen(scope, norm):
+                logger.info(f"[{self.name}] 这个链接刚刚发过，先不重复解析")
+                return
+
+            # 解析URL（最多尝试 max_parse_attempts 次）。缓存命中则跳过上游。
+            data = await cache.get(norm) if norm else None
+            from_cache = data is not None
+            if not from_cache:
+                parse_start = time.monotonic()
+                for attempt in range(1, self.max_parse_attempts + 1):
+                    data = await self.parse(real_url)
+                    if data:
+                        break
+                    if attempt < self.max_parse_attempts:
+                        delay = self._retry_delays[min(attempt - 1, len(self._retry_delays) - 1)]
+                        logger.warning(
+                            f"[{self.name}] 信息解析第 {attempt}/{self.max_parse_attempts} 次失败，"
+                            f"{delay:.0f}s 后重试"
+                        )
+                        await asyncio.sleep(delay)
+                if data and norm:
+                    await cache.set(norm, data)
+                    parser_name = getattr(self, "parser_name", self.__class__.__name__)
+                    try:
+                        from .parse_stats import record_parse
+                        await record_parse(parser_name, (time.monotonic() - parse_start) * 1000)
+                    except Exception:
+                        pass
             if not data:
                 logger.error(f"[{self.name}] 重试 {self.max_parse_attempts} 次后仍无法从 {real_url} 解析信息。")
                 await self.reply_with_error_cooldown(event, "无法获取链接信息，可能是接口变动或链接不存在。")
                 return
-
-            # 解析完成即记录耗时（在 format_response 之前，保证本次记录可查）
-            parser_name = getattr(self, "parser_name", self.__class__.__name__)
-            try:
-                from .parse_stats import record_parse
-                await record_parse(parser_name, (time.monotonic() - parse_start) * 1000)
-            except Exception:
-                pass
             
             # 格式化响应
             response = await self.format_response(event, data)
+            sent = False
             if response:
                 try:
                     await event.bot.send_forwarded_messages(target=event, nodes=response)
+                    sent = True
                 except Exception as send_error:
-                    # 合并转发/媒体上传失败时，文字摘要仍然要进群
+                    # 合并转发整段都没送出去时，至少把文字摘要送进群
                     logger.warning(
                         f"[{self.name}] 合并转发发送失败，改为文字摘要: "
                         f"{type(send_error).__name__}: {send_error}"
@@ -282,8 +296,11 @@ class BaseParser(metaclass=abc.ABCMeta):
                     from .utils import summarize_forward_nodes
                     summary = summarize_forward_nodes(response, page_url=real_url or url)
                     await event.reply(summary)
+                    sent = True
             else:
                 await self.reply_with_error_cooldown(event, "解析成功，但无法生成响应。")
+            if sent and use_dedupe and norm:
+                await cache.mark(scope, norm)
                 
         except Exception as e:
             logger.error(f"[{self.name}] 处理链接时发生错误: {type(e).__name__}: {e}")

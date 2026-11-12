@@ -175,6 +175,49 @@ class DockerModel(BaseModel):
     client_cert_path: Optional[str] = None
     client_key_path: Optional[str] = None
 
+
+class BirthdayModel(BaseModel):
+    """生日提醒。只存月-日，不存年份。"""
+    hour: int = 9
+    window_hours: int = 3
+    lookahead_days: int = 30
+
+
+class ChattyModel(BaseModel):
+    """话痨榜只记条数。retain_days 要盖住「本周」。"""
+    top_n: int = 10
+    retain_days: int = 8
+
+
+class ReminderModel(BaseModel):
+    """/提醒 的上限。时间按 Asia/Shanghai。"""
+    max_per_user: int = 8
+    max_per_group: int = 40
+    min_interval_minutes: int = 30
+
+
+class LinkCacheModel(BaseModel):
+    """
+    链接解析缓存。
+
+    ttl_seconds：解析结果保留多久。
+    dedupe_seconds：同一群同一链接在这段时间内不重复解析、不重复发送。
+    max_items：内存 LRU 上限。Redis 侧靠 TTL 回收。
+    """
+    ttl_seconds: int = 600
+    dedupe_seconds: int = 180
+    max_items: int = 256
+
+
+class CodePyModel(BaseModel):
+    """
+    对应 `config.toml` 中的 `[code_py]` 配置块。
+
+    生产环境通常没有 Docker 套接字，也没有 python-sandbox 镜像。
+    默认关闭，避免启动时去连接 Docker。
+    """
+    enabled: bool = False
+
 class ImageManagerModel(BaseModel):
     """
     对应 `config.toml` 中的 `[image_manager]` 配置块。
@@ -386,6 +429,11 @@ class ConfigModel(BaseModel):
     redis: RedisModel
     mysql: MySQLModel
     docker: DockerModel
+    code_py: CodePyModel = Field(default_factory=CodePyModel)
+    link_cache: LinkCacheModel = Field(default_factory=LinkCacheModel)
+    reminder: ReminderModel = Field(default_factory=ReminderModel)
+    chatty: ChattyModel = Field(default_factory=ChattyModel)
+    birthday: BirthdayModel = Field(default_factory=BirthdayModel)
     image_manager: ImageManagerModel
     reverse_ws: ReverseWSModel
     threading: ThreadingModel = Field(default_factory=ThreadingModel)

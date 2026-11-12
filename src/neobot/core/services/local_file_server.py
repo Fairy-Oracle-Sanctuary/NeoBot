@@ -16,7 +16,7 @@ import secrets
 import time
 from pathlib import Path
 from typing import Optional, Dict, List, Any, Tuple
-from urllib.parse import urljoin, urlparse, parse_qs
+from urllib.parse import parse_qs, unquote, urljoin, urlparse
 import aiohttp
 from aiohttp import web
 
@@ -617,6 +617,47 @@ def prepare_forward_nodes(nodes: Optional[List[Any]]) -> List[Any]:
     return nodes
 
 
+def _path_from_file_url(file_val: str) -> Optional[Path]:
+    if not file_val.startswith("file://"):
+        return None
+    raw = unquote(file_val[len("file://"):])
+    if not raw:
+        return None
+    return Path(raw)
+
+
+def _is_under_download_dir(server: "LocalFileServer", path: Path) -> bool:
+    try:
+        path.resolve().relative_to(server.download_dir.resolve())
+    except (OSError, ValueError):
+        return False
+    return True
+
+
+def _file_id_for_path(server: "LocalFileServer", path: Path) -> Optional[str]:
+    try:
+        resolved = path.resolve()
+    except OSError:
+        return None
+    for file_id, mapped in server.file_map.items():
+        try:
+            if Path(mapped).resolve() == resolved:
+                return file_id
+        except OSError:
+            continue
+    return None
+
+
+def _inline_image(path: Path) -> Optional[str]:
+    try:
+        size = path.stat().st_size
+    except OSError:
+        return None
+    if size <= 0 or size > BASE64_IMAGE_MAX_BYTES:
+        return None
+    return "base64://" + base64.b64encode(path.read_bytes()).decode("ascii")
+
+
 def _prepare_segment(server: "LocalFileServer", seg: Any) -> None:
     if not isinstance(seg, dict):
         return
@@ -628,17 +669,36 @@ def _prepare_segment(server: "LocalFileServer", seg: Any) -> None:
     file_val = payload.get("file")
     if not isinstance(file_val, str) or not file_val:
         return
-    file_id = server.file_id_from_url(file_val)
-    if not file_id:
-        rewritten = server.rewrite_loopback_url(file_val)
-        if rewritten != file_val:
-            payload["file"] = rewritten
+    if file_val.startswith("base64://") or file_val.startswith("data:"):
         return
-    path = server.file_map.get(file_id)
+
+    local_path = _path_from_file_url(file_val)
+    if local_path is not None:
+        if not _is_under_download_dir(server, local_path):
+            return
+        file_id = _file_id_for_path(server, local_path)
+        path = local_path
+    else:
+        file_id = server.file_id_from_url(file_val)
+        if not file_id:
+            rewritten = server.rewrite_loopback_url(file_val)
+            if rewritten != file_val:
+                payload["file"] = rewritten
+            return
+        mapped = server.file_map.get(file_id)
+        path = Path(mapped) if mapped is not None else None
+
     if path is None or not path.exists():
+        if file_id:
+            payload["file"] = server.public_url(file_id)
+        return
+    if seg.get("type") == "image":
+        inlined = _inline_image(path)
+        if inlined:
+            payload["file"] = inlined
+            return
+    if file_id:
         payload["file"] = server.public_url(file_id)
         return
-    if seg.get("type") == "image" and path.stat().st_size <= BASE64_IMAGE_MAX_BYTES:
-        payload["file"] = "base64://" + base64.b64encode(path.read_bytes()).decode("ascii")
-        return
-    payload["file"] = server.public_url(file_id)
+    # file:// 还没登记进下载表时，小图已经在上面转成 base64。大文件保持原样，
+    # 交给上层决定要不要改走群文件。

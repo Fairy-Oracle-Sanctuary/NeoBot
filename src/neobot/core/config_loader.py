@@ -8,8 +8,8 @@ from pathlib import Path
 
 import tomllib
 from pydantic import ValidationError
-from .config_models import ConfigModel, NapCatWSModel, BotModel, RedisModel, DockerModel, ImageManagerModel, MySQLModel, ReverseWSModel, ThreadingModel, BilibiliModel, DouyinModel, JinmanModel, EhentaiModel, DivingFishModel, LocalFileServerModel, DiscordModel, CrossPlatformModel, LoggingModel, McCAdapterModel, DailyModel, DiceModel, PokeModel, PollModel, CaptionModel, SaucenaoModel, E926Model, MusicModel, DailyCpModel
-from .utils.logger import ModuleLogger
+from .config_models import ConfigModel, NapCatWSModel, BotModel, RedisModel, DockerModel, CodePyModel, LinkCacheModel, ReminderModel, ChattyModel, BirthdayModel, ImageManagerModel, MySQLModel, ReverseWSModel, ThreadingModel, BilibiliModel, DouyinModel, JinmanModel, EhentaiModel, DivingFishModel, LocalFileServerModel, DiscordModel, CrossPlatformModel, LoggingModel, McCAdapterModel, DailyModel, DiceModel, PokeModel, PollModel, CaptionModel, SaucenaoModel, E926Model, MusicModel, DailyCpModel
+from .utils.logger import ModuleLogger, apply_retention_days, resolve_retention_days
 from .utils.exceptions import ConfigError, ConfigNotFoundError, ConfigValidationError
 from .utils.env_loader import env_loader
 
@@ -60,6 +60,7 @@ class Config:
             raw_config = self._override_with_env_vars(raw_config)
             
             self._model = ConfigModel(**raw_config)
+            apply_retention_days(self._model.logging.retention_days)
             self.logger.success("配置加载并验证成功！")
 
         except ValidationError as e:
@@ -205,11 +206,15 @@ class Config:
             server_config['base_url'] = env_loader.get('LOCAL_FILE_SERVER_BASE_URL', server_config.get('base_url', ''))
         
         # 日志配置
-        if 'logging' in raw_config:
-            log_config = raw_config['logging']
-            log_config['level'] = env_loader.get('LOG_LEVEL', log_config.get('level', 'DEBUG'))
-            log_config['file_level'] = env_loader.get('LOG_FILE_LEVEL', log_config.get('file_level', 'DEBUG'))
-            log_config['console_level'] = env_loader.get('LOG_CONSOLE_LEVEL', log_config.get('console_level', 'INFO'))
+        if 'logging' in raw_config or env_loader.get('LOG_RETENTION_DAYS'):
+            log_config = raw_config.setdefault('logging', {})
+            if 'logging' in raw_config:
+                log_config['level'] = env_loader.get('LOG_LEVEL', log_config.get('level', 'DEBUG'))
+                log_config['file_level'] = env_loader.get('LOG_FILE_LEVEL', log_config.get('file_level', 'DEBUG'))
+                log_config['console_level'] = env_loader.get('LOG_CONSOLE_LEVEL', log_config.get('console_level', 'INFO'))
+            raw_days = env_loader.get('LOG_RETENTION_DAYS')
+            if raw_days:
+                log_config['retention_days'] = resolve_retention_days(raw_days)
         
         return raw_config
 
@@ -298,6 +303,31 @@ class Config:
         获取 Docker 配置
         """
         return self._model.docker
+
+    @property
+    def code_py(self) -> CodePyModel:
+        """获取 /py 沙箱开关。默认关闭。"""
+        return self._model.code_py
+
+    @property
+    def link_cache(self) -> LinkCacheModel:
+        """获取链接解析缓存配置。"""
+        return self._model.link_cache
+
+    @property
+    def reminder(self) -> ReminderModel:
+        """获取定时提醒的上限。"""
+        return self._model.reminder
+
+    @property
+    def chatty(self) -> ChattyModel:
+        """获取话痨榜的条数和保留天数。"""
+        return self._model.chatty
+
+    @property
+    def birthday(self) -> BirthdayModel:
+        """获取生日提醒的时刻和提前查看天数。"""
+        return self._model.birthday
     
     @property
     def image_manager(self) -> ImageManagerModel:

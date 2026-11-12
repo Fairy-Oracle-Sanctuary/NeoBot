@@ -753,18 +753,29 @@ async def _build_media_forward_nodes(
     return nodes
 
 
-async def process_tweet(event: MessageEvent, tweet_id: str):
+async def process_tweet(event: MessageEvent, tweet_id: str, *, use_dedupe: bool = True):
     """获取并发送推文解析结果（记录解析耗时，超 1s 提醒开发者）。"""
+    from neobot.plugins.web_parser.link_cache import get_link_cache
+
+    cache = get_link_cache()
+    norm = cache.normalize(f"https://x.com/i/status/{tweet_id}")
+    scope = cache.scope_for(event)
+    if use_dedupe and await cache.seen(scope, norm):
+        logger.info("[TwitterParser] 这条推文刚刚发过，先不重复解析")
+        return
+
+    cached = await cache.get(norm)
     start = time.monotonic()
     try:
-        data = await fetch_tweet(tweet_id)
+        data = cached if cached is not None else await fetch_tweet(tweet_id)
     finally:
-        cost_ms = (time.monotonic() - start) * 1000
-        from neobot.plugins.web_parser.parse_stats import record_parse
-        try:
-            await record_parse("twitter", cost_ms)
-        except Exception:
-            pass
+        if cached is None:
+            cost_ms = (time.monotonic() - start) * 1000
+            from neobot.plugins.web_parser.parse_stats import record_parse
+            try:
+                await record_parse("twitter", cost_ms)
+            except Exception:
+                pass
     if data is None:
         await reply_with_error_cooldown(event, "推特解析失败，请稍后再试。")
         return
@@ -783,7 +794,11 @@ async def process_tweet(event: MessageEvent, tweet_id: str):
         await reply_with_error_cooldown(event, f"推特解析失败：{reason}")
         return
 
+    if cached is None:
+        await cache.set(norm, data)
     await _send_tweet(event, tweet)
+    if use_dedupe:
+        await cache.mark(scope, norm)
 
 
 def _is_duplicate_message(message_id: int) -> bool:
@@ -800,11 +815,11 @@ def _is_duplicate_message(message_id: int) -> bool:
     return False
 
 
-async def _handle_tweet_url(event: MessageEvent, url: str) -> bool:
+async def _handle_tweet_url(event: MessageEvent, url: str, *, use_dedupe: bool = True) -> bool:
     """解析单个推特链接，返回是否成功识别并处理。"""
     match = STATUS_URL_RE.search(url)
     if match:
-        await process_tweet(event, match.group(1))
+        await process_tweet(event, match.group(1), use_dedupe=use_dedupe)
         return True
 
     tco_match = TCO_URL_RE.search(url)
@@ -812,7 +827,7 @@ async def _handle_tweet_url(event: MessageEvent, url: str) -> bool:
         final_url = await resolve_short_url(tco_match.group(0))
         match = STATUS_URL_RE.search(final_url or "")
         if match:
-            await process_tweet(event, match.group(1))
+            await process_tweet(event, match.group(1), use_dedupe=use_dedupe)
             return True
 
     return False
@@ -868,7 +883,7 @@ async def handle_twitter_command(bot, event: MessageEvent, args: list):
         await reply_with_error_cooldown(event, "用法：/推特 <推文链接>")
         return
 
-    handled = await _handle_tweet_url(event, url)
+    handled = await _handle_tweet_url(event, url, use_dedupe=False)
     if handled:
         await _react_ok(event)
     else:
