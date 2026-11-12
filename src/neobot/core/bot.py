@@ -98,27 +98,17 @@ class Bot(MessageAPI, GroupAPI, FriendAPI, AccountAPI, MediaAPI):
             ValueError: 如果事件对象中既没有 `group_id` 也没有 `user_id`。
         """
         # CommandContext 等平台上下文同样带 group_id/user_id，按事件处理
-        from neobot.core.utils.logger import logger
-        try:
-            from neobot.core.services.local_file_server import prepare_forward_nodes
-            nodes = prepare_forward_nodes(nodes)
-        except Exception as e:
-            logger.warning(f"准备合并转发媒体失败，按原节点发送: {type(e).__name__}: {e}")
-
         if isinstance(target, OneBotEvent) or hasattr(target, "platform"):
             group_id = getattr(target, "group_id", None)
             user_id = getattr(target, "user_id", None)
-            
             if group_id:
-                # 直接发送群聊合并转发
-                await self.send_group_forward_msg(group_id, nodes)
+                kind, target_id = "group", group_id
             elif user_id:
-                # 发送私聊合并转发
-                await self.send_private_forward_msg(user_id, nodes)
+                kind, target_id = "private", user_id
             else:
                 raise ValueError("Event has neither group_id nor user_id")
-
         else:
-            # 默认行为是发送到群聊
-            group_id = target
-            await self.send_group_forward_msg(group_id, nodes)
+            kind, target_id = "group", target
+
+        from neobot.core.services.forward_delivery import deliver_forward
+        await deliver_forward(self, kind, int(target_id), nodes)
