@@ -33,8 +33,7 @@ services:
       # 日志与运行时数据持久化
       - ./logs:/app/logs
       - ./src/neobot/data:/app/src/neobot/data
-      # 可选：如需代码沙箱执行功能，取消注释挂载 Docker socket
-      # - /var/run/docker.sock:/var/run/docker.sock
+      # 不要挂载 docker.sock。[code_py] 默认关闭，生产上也没有 python-sandbox 镜像。
     logging:
       driver: json-file
       options:

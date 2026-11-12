@@ -175,6 +175,16 @@ class DockerModel(BaseModel):
     client_cert_path: Optional[str] = None
     client_key_path: Optional[str] = None
 
+
+class CodePyModel(BaseModel):
+    """
+    对应 `config.toml` 中的 `[code_py]` 配置块。
+
+    生产环境通常没有 Docker 套接字，也没有 python-sandbox 镜像。
+    默认关闭，避免启动时去连接 Docker。
+    """
+    enabled: bool = False
+
 class ImageManagerModel(BaseModel):
     """
     对应 `config.toml` 中的 `[image_manager]` 配置块。
@@ -386,6 +396,7 @@ class ConfigModel(BaseModel):
     redis: RedisModel
     mysql: MySQLModel
     docker: DockerModel
+    code_py: CodePyModel = Field(default_factory=CodePyModel)
     image_manager: ImageManagerModel
     reverse_ws: ReverseWSModel
     threading: ThreadingModel = Field(default_factory=ThreadingModel)

@@ -35,6 +35,11 @@ sandbox_image = "python-sandbox:latest"
 timeout = 10
 concurrency_limit = 5
 
+[code_py]
+# /py 沙箱。默认关闭：生产容器没有 docker.sock，也没有 python-sandbox 镜像。
+# 只有准备好镜像并且明确要开放时才改成 true。不要为了这个去挂载 docker.sock。
+enabled = false
+
 [image_manager]
 image_height = 1920
 image_width = 1080

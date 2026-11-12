@@ -13,6 +13,7 @@ def mock_config():
     config.docker.timeout = 5
     config.docker.concurrency_limit = 2
     config.docker.tls_verify = False
+    config.code_py.enabled = False
     return config
 
 @pytest.fixture
@@ -24,27 +25,48 @@ def mock_docker_client():
 
 @pytest.fixture
 def executor(mock_config, mock_docker_client):
-    return CodeExecutor(mock_config)
+    mock_config.code_py.enabled = True
+    code_executor = CodeExecutor(mock_config)
+    assert code_executor.ensure_client()
+    return code_executor
+
+def test_disabled_does_not_touch_docker(mock_config):
+    """关闭时构造和探测都不连接 Docker。"""
+    with patch("docker.from_env") as mock_from_env:
+        code_executor = CodeExecutor(mock_config)
+        assert code_executor.enabled is False
+        assert code_executor.ensure_client() is False
+        assert code_executor.docker_client is None
+        mock_from_env.assert_not_called()
 
 def test_init_success(mock_config, mock_docker_client):
-    """测试初始化成功"""
-    executor = CodeExecutor(mock_config)
-    assert executor.docker_client is not None
+    """测试第一次使用时才连接 Docker"""
+    mock_config.code_py.enabled = True
+    code_executor = CodeExecutor(mock_config)
+    assert code_executor.docker_client is None
+    mock_docker_client.ping.assert_not_called()
+    assert code_executor.ensure_client() is True
+    assert code_executor.docker_client is not None
     mock_docker_client.ping.assert_called_once()
 
 def test_init_docker_error(mock_config):
-    """测试初始化 Docker 失败"""
+    """测试连接 Docker 失败"""
+    mock_config.code_py.enabled = True
     with patch("docker.from_env", side_effect=docker.errors.DockerException("Docker error")):
-        executor = CodeExecutor(mock_config)
-        assert executor.docker_client is None
+        code_executor = CodeExecutor(mock_config)
+        assert code_executor.ensure_client() is False
+        assert code_executor.docker_client is None
+        assert code_executor.ensure_client() is False
 
 def test_init_remote_docker(mock_config):
-    """测试初始化远程 Docker"""
+    """测试连接远程 Docker"""
+    mock_config.code_py.enabled = True
     mock_config.docker.base_url = "tcp://1.2.3.4:2375"
     with patch("docker.DockerClient") as mock_client_cls:
-        executor = CodeExecutor(mock_config)
+        code_executor = CodeExecutor(mock_config)
+        assert code_executor.ensure_client() is True
         mock_client_cls.assert_called_once()
-        assert executor.docker_client is not None
+        assert code_executor.docker_client is not None
 
 @pytest.mark.asyncio
 async def test_add_task_success(executor):
@@ -55,9 +77,11 @@ async def test_add_task_success(executor):
 
 @pytest.mark.asyncio
 async def test_add_task_no_docker(mock_config):
-    """测试 Docker 未初始化时添加任务"""
+    """测试 Docker 未连接时添加任务"""
+    mock_config.code_py.enabled = True
     with patch("docker.from_env", side_effect=docker.errors.DockerException):
         executor = CodeExecutor(mock_config)
+        assert executor.ensure_client() is False
         callback = AsyncMock()
         with pytest.raises(RuntimeError, match="Docker环境未就绪"):
             await executor.add_task("print('hello')", callback)
