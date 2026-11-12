@@ -226,6 +226,80 @@ def test_saucenao_hides_nsfw_and_reports_quota():
     assert all(urlparse(item["links"][0]).hostname != "nhentai.net" for item in parsed)
 
 
+def test_source_filter_drops_adult_hosts_and_indexes():
+    blocked = (
+        "https://e621.net/posts/1",
+        "https://static1.e621.net/data/a.jpg",
+        "https://danbooru.donmai.us/posts/1",
+        "https://gelbooru.com/index.php?page=post&s=view&id=1",
+        "https://rule34.xxx/index.php?page=post&s=view&id=1",
+        "https://rule34.paheal.net/post/view/1",
+        "https://chan.sankakucomplex.com/post/show/1",
+        "https://yande.re/post/show/1",
+        "https://konachan.com/post/show/1",
+        "https://nhentai.net/g/1",
+        "https://e-hentai.org/g/1/2",
+        "https://exhentai.org/g/1/2",
+        "https://www.furaffinity.net/view/1",
+    )
+    for url in blocked:
+        assert image_source.url_is_nsfw(url) is True
+    allowed = (
+        "https://e926.net/posts/1",
+        "https://konachan.net/post/show/1",
+        "https://safebooru.org/index.php?page=post&s=view&id=1",
+        "https://www.pixiv.net/artworks/1",
+        "https://e621.net.evil.example/posts/1",
+        "https://not-e621.net/posts/1",
+    )
+    for url in allowed:
+        assert image_source.url_is_nsfw(url) is False
+    assert image_source.url_is_nsfw("https://www.furaffinity.net/view/9", rating="safe") is False
+    assert image_source.url_is_nsfw("https://www.furaffinity.net/view/9", rating="explicit") is True
+
+    payload = {
+        "header": {"status": 0},
+        "results": [
+            {
+                "header": {"similarity": "91", "hidden": 0, "index_id": 29},
+                "data": {"ext_urls": ["https://e621.net/posts/1", "https://www.pixiv.net/artworks/2"]},
+            },
+            {
+                "header": {"similarity": "88", "hidden": 0, "index_id": 9},
+                "data": {
+                    "ext_urls": [
+                        "https://danbooru.donmai.us/posts/3",
+                        "https://www.pixiv.net/artworks/3",
+                    ],
+                    "creator": "桃",
+                },
+            },
+            {
+                "header": {"similarity": "95", "hidden": 0, "index_id": 5},
+                "data": {"ext_urls": ["https://www.pixiv.net/artworks/4"], "rating": "explicit"},
+            },
+            {
+                "header": {"similarity": "80", "hidden": 0, "index_id": 40},
+                "data": {"ext_urls": ["https://www.furaffinity.net/view/5"], "rating": "safe", "author": "甲"},
+            },
+            {
+                "header": {"similarity": "80", "hidden": 0, "index_id": 40},
+                "data": {"ext_urls": ["https://www.furaffinity.net/view/6"]},
+            },
+        ],
+    }
+    error, kept = image_source.filter_saucenao_results(payload, min_similarity=55)
+    assert error is None
+    hosts = [urlparse(item["links"][0]).hostname for item in kept]
+    assert hosts == ["www.pixiv.net", "www.furaffinity.net"]
+    assert kept[0]["author"] == "桃"
+    assert kept[1]["author"] == "甲"
+    mask = int(image_source.excluded_index_mask())
+    assert mask & (1 << 29)
+    assert mask & (1 << 38)
+    assert not mask & (1 << 5)
+
+
 def test_caption_wraps_and_renders_cjk():
     font_path = str(caption._FONT)
     font = caption.ImageFont.truetype(font_path, size=20, index=0)
@@ -240,7 +314,9 @@ def test_caption_wraps_and_renders_cjk():
     buffer = io.BytesIO()
     Image.new("RGB", (80, 40), (20, 20, 20)).save(buffer, format="PNG")
     rendered = caption.render_caption_image(buffer.getvalue(), "贴贴", font_path, max_chars=36)
+    # 约定输出 JPEG（文件头 FFD8），QQ 发图走这个格式
     assert rendered[:2] == b"\xff\xd8"
+    assert rendered[:8] != b"\x89PNG\r\n\x1a\n"
     with pytest.raises(caption.CaptionError):
         caption.normalize_caption("字" * 40, max_chars=36)
 

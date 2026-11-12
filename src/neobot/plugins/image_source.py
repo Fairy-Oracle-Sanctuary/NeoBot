@@ -33,17 +33,36 @@ plugin_manifest = define_plugin(
     version="0.1.0",
 )
 
+# 这些站点本身会放明确内容。用主机名判断，不在整段 URL 里搜子串。
+# konachan.net、e926.net、safebooru.org 不在里面：它们是对应站点的全年龄版本。
 _NSFW_HOSTS = (
+    "e621.net",
     "nhentai.net",
+    "nhentai.to",
+    "nhentai.xxx",
     "e-hentai.org",
     "exhentai.org",
-    "rule34.xxx",
-    "rule34.paheal.net",
     "gelbooru.com",
+    "danbooru.donmai.us",
+    "yande.re",
+    "konachan.com",
     "sankakucomplex.com",
+    "sankaku.app",
     "xvideos.com",
     "pornhub.com",
+    "xhamster.com",
+    "kemono.su",
+    "kemono.cr",
+    "kemono.party",
+    "fakku.net",
+    "hitomi.la",
+    "lolibooru.moe",
+    "furaffinity.net",
 )
+# SauceNAO 索引里以成人内容为主的库。命中就整条丢掉，不转述侧面链接。
+# 0/1/2/16/18/22/38 是 H 系，29 是 e621，43 是 Kemono。
+_ADULT_INDEXES = frozenset({0, 1, 2, 16, 18, 22, 29, 38, 43})
+_SAFE_RATINGS = frozenset({"s", "safe", "g", "general"})
 _NSFW_PATH_MARKERS = ("r18", "r-18", "nsfw", "explicit")
 _waiting: dict[int, asyncio.Task] = {}
 
@@ -62,15 +81,54 @@ def host_is(url: str, domain: str) -> bool:
     return bool(host) and (host == name or host.endswith("." + name))
 
 
-def url_is_nsfw(url: str) -> bool:
-    if any(host_is(url, domain) for domain in _NSFW_HOSTS):
+def host_is_blocked(url: str) -> bool:
+    host = hostname_of(url)
+    if not host:
         return True
+    if "rule34" in host.split("."):
+        return True
+    return any(host_is(url, domain) for domain in _NSFW_HOSTS)
+
+
+def path_is_unsafe(url: str) -> bool:
     try:
         parsed = urlparse(url)
     except ValueError:
-        return False
+        return True
     haystack = f"{parsed.path} {parsed.query}".lower()
     return any(marker in haystack for marker in _NSFW_PATH_MARKERS)
+
+
+def result_rating(data: dict) -> str | None:
+    for key in ("rating", "rating_tag"):
+        value = data.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip().lower()
+    return None
+
+
+def url_is_nsfw(url: str, rating: str | None = None) -> bool:
+    """FurAffinity 只有 SauceNAO 明确标了全年龄才放行，其它成人站一律不放。"""
+    if path_is_unsafe(url):
+        return True
+    if host_is(url, "furaffinity.net"):
+        return rating not in _SAFE_RATINGS
+    return host_is_blocked(url)
+
+
+def adult_index(header: dict) -> bool:
+    try:
+        index_id = int(header.get("index_id"))
+    except (TypeError, ValueError):
+        return False
+    return index_id in _ADULT_INDEXES
+
+
+def excluded_index_mask(indexes: Iterable[int] = _ADULT_INDEXES) -> str:
+    mask = 0
+    for index in indexes:
+        mask |= 1 << int(index)
+    return str(mask)
 
 
 def saucenao_error_message(header: dict) -> str | None:
@@ -124,7 +182,7 @@ def filter_saucenao_results(payload: dict, min_similarity: float = 55) -> tuple[
         if not isinstance(item, dict):
             continue
         item_header = item.get("header") or {}
-        if int(item_header.get("hidden") or 0) != 0:
+        if int(item_header.get("hidden") or 0) != 0 or adult_index(item_header):
             continue
         try:
             similarity = float(item_header.get("similarity") or 0)
@@ -133,7 +191,10 @@ def filter_saucenao_results(payload: dict, min_similarity: float = 55) -> tuple[
         if similarity < min_similarity:
             continue
         data = item.get("data") or {}
-        links = [url for url in _links_of(data) if not url_is_nsfw(url)]
+        rating = result_rating(data)
+        if rating is not None and rating not in _SAFE_RATINGS:
+            continue
+        links = [url for url in _links_of(data) if not url_is_nsfw(url, rating)]
         if not links:
             continue
         kept.append(
@@ -221,6 +282,7 @@ async def _saucenao(url: str, settings: dict) -> tuple[str | None, list[dict]]:
         "db": "999",
         "numres": str(settings["num_results"]),
         "hide": "3",
+        "dbmaski": excluded_index_mask(),
         "url": url,
     }
     timeout = aiohttp.ClientTimeout(total=settings["timeout"])

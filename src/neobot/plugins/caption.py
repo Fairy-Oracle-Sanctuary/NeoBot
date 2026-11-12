@@ -1,4 +1,4 @@
-"""给图片底部加一行字。"""
+"""给图片底部加一行字。发给 QQ 的成品是 JPEG，不是 PNG。"""
 from __future__ import annotations
 
 import asyncio
@@ -91,6 +91,10 @@ def layout_caption(text: str, image_width: int, font_path: str) -> tuple[int, li
 
 
 def render_caption_image(image_bytes: bytes, text: str, font_path: str, max_chars: int = 36) -> bytes:
+    """画上文字后返回 JPEG 字节。
+
+    QQ / NapCat 发 JPEG 更稳，体积也比同尺寸 PNG 小。本仓库里其它要发给 QQ 的生成图同样用 JPEG。
+    """
     caption = normalize_caption(text, max_chars=max_chars)
     image = Image.open(io.BytesIO(image_bytes))
     image = image.convert("RGBA")
