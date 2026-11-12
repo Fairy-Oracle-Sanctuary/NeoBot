@@ -111,6 +111,66 @@ salt = ""
 # /今天吃什么 的菜单。留空（foods = []）则使用插件内置的一份。
 foods = ["番茄炒蛋", "味噌拉面", "葱油拌面", "小笼包"]
 
+[daily_cp]
+# /今日CP 的盐。换掉会使同一天的配对改变。不是密钥，可以留空。
+salt = ""
+
+[dice]
+# 同一群两次掷骰的最小间隔（秒）
+cooldown_seconds = 3
+max_dice = 100
+max_faces = 1000
+
+[poke]
+# 同一群两次戳一戳回复的最小间隔（秒）
+cooldown_seconds = 20
+# true 时会回戳对方。默认只回一句文字。
+poke_back = false
+
+[poll]
+# 每个群同时进行中的投票上限
+max_concurrent = 3
+# 未结束的投票多少小时后自动过期
+ttl_hours = 24
+max_options = 8
+
+[caption]
+# /加字 允许的最大字数
+max_chars = 36
+
+[saucenao]
+# 留空则 /搜源 会说明尚未配置，并在 ascii2d_fallback 开启时尝试备用。
+api_key = ""
+min_similarity = 55
+num_results = 6
+ascii2d_fallback = true
+timeout = 15
+
+[e926]
+# e926.net 是 SFW 站点。账号可留空，以访客身份请求。
+user_agent = "NeoBot/1.0 (QQ furry group bot; contact: local-operator)"
+username = ""
+api_key = ""
+rate_limit_seconds = 8
+max_count = 3
+# 这些标签会被拒绝，也会作为负标签发给 e926
+blacklist = ["cub", "young", "child", "loli", "shota", "toddler", "baby", "diaper", "gore", "scat", "watersports", "urine"]
+
+[music]
+# 自建点歌服务。留空则使用 public_base。
+# 旧的本地 Netease_url（POST /search 与 POST /song）请把 base_url 指过去，并把 api_style 改成 "netease_url"。
+base_url = ""
+# 公开的网易云 API 兼容接口，不保证长期可用。挂了就换成你自己的。
+public_base = "https://netease-cloud-music-api-psi-azure.vercel.app"
+# ncm：/search、/song/url、/song/detail
+# netease_url：旧本地 POST 协议
+api_style = "ncm"
+# ncm 拿不到直链时使用。{id} 会替换成歌曲 ID。留空 "" 则不兜底。
+play_url_template = "https://api.injahow.cn/meting/?server=netease&type=url&id={id}"
+# 识别网易云 / 酷狗 / YouTube 链接时回复一张文字信息卡
+link_card = true
+timeout = 12
+
 [logging]
 # 长期运行时建议用 INFO：DEBUG 会把每条消息、每个事件都写进文件，磁盘增长很快
 level = "DEBUG"

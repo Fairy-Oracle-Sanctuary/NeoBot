@@ -3,19 +3,52 @@ from datetime import datetime
 from typing import Any, Dict, List
 
 import aiohttp
-from neobot.plugin_api import platform_command, image_manager, logger, input_validator, define_plugin
+from neobot.plugin_api import platform_command, image_manager, logger, input_validator, define_plugin, redis_manager
 from neobot.models import MessageEvent, MessageSegment
 from .resource.city_code import CITY_CODES
 # 插件元数据
 plugin_manifest = define_plugin(
     name="weather",
     description="查询天气信息，支持中国天气网数据。",
-    usage="/天气 [城市代码] - 查询指定城市的天气信息\n例如：/天气 101190207 (南京)",
+    usage="/天气 [城市名] - 查询天气，例如 /天气 南京。不带城市时查询你上次查过的地方。",
 )
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
 }
+
+_LAST_CITY = "neobot:weather:last:{user_id}"
+
+
+def resolve_city(city_input: str, codes: dict) -> tuple[str | None, str | None]:
+    """按城市名、包含关系或 9 位城市代码匹配。返回 (代码, 展示名)。"""
+    if city_input in codes:
+        return codes[city_input], city_input
+    if input_validator.nine_digit_pattern.match(city_input):
+        for name, code in codes.items():
+            if code == city_input:
+                return city_input, name
+        return city_input, city_input
+    for name, code in codes.items():
+        if city_input in name:
+            return code, name
+    return None, None
+
+
+async def _remember_city(user_id: int, name: str) -> None:
+    try:
+        await redis_manager.set(_LAST_CITY.format(user_id=user_id), name, ex=60 * 60 * 24 * 180)
+    except Exception as exc:
+        logger.warning(f"[天气] 没能记住城市: {type(exc).__name__}: {exc}")
+
+
+async def _last_city(user_id: int) -> str:
+    try:
+        value = await redis_manager.get(_LAST_CITY.format(user_id=user_id))
+    except Exception as exc:
+        logger.warning(f"[天气] 没能读到上次的城市: {type(exc).__name__}: {exc}")
+        return ""
+    return str(value or "").strip()
 
 
 async def get_weather_data(city_code: str) -> Dict[str, Any]:
@@ -146,16 +179,22 @@ async def handle_weather(bot, event: MessageEvent, args: List[str]):
         event: 消息事件
         args: 指令参数
     """
+    remembered = False
     if not args:
-        # 显示支持的城市列表
-        city_list = "\n".join(
-            [f"{name}: {code}" for name, code in list(CITY_CODES.items())[:10]]
-        )
-        reply_msg = f"请指定城市名称或城市代码，例如：\n/天气 北京\n/天气 101010100\n\n支持的城市：\n{city_list}\n..."
-        await event.reply(reply_msg)
-        return
-
-    city_input = args[0].strip()
+        city_input = await _last_city(int(getattr(event, "user_id", 0) or 0))
+        remembered = bool(city_input)
+        if not city_input:
+            city_list = "\n".join(
+                [f"{name}: {code}" for name, code in list(CITY_CODES.items())[:10]]
+            )
+            reply_msg = (
+                "请指定城市名，例如：\n/天气 南京\n/天气 北京\n\n"
+                f"也可以用城市代码。支持的城市：\n{city_list}\n..."
+            )
+            await event.reply(reply_msg)
+            return
+    else:
+        city_input = args[0].strip()
     
     # 输入验证
     if not input_validator.validate_sql_input(city_input):
@@ -166,25 +205,16 @@ async def handle_weather(bot, event: MessageEvent, args: List[str]):
         await event.reply("输入包含不安全内容，请重新输入。")
         return
 
-    # 尝试匹配城市名称或直接使用城市代码
-    city_code = None
-    if city_input in CITY_CODES:
-        city_code = CITY_CODES[city_input]
-    elif input_validator.nine_digit_pattern.match(city_input):
-        city_code = city_input
-    else:
-        # 尝试模糊匹配城市名称
-        for name, code in CITY_CODES.items():
-            if city_input in name:
-                city_code = code
-                break
+    city_code, display_name = resolve_city(city_input, CITY_CODES)
 
     if not city_code:
-        await event.reply(f"未找到城市 '{city_input}'，请检查城市名称或使用城市代码。")
+        await event.reply(f"没找到城市「{city_input}」，换个城市名试试。")
         return
 
-    # 获取天气数据
-    await event.reply("正在查询天气信息，请稍候...")
+    await _remember_city(int(getattr(event, "user_id", 0) or 0), display_name or city_input)
+
+    prefix = "沿用你上次查的城市。\n" if remembered else ""
+    await event.reply(prefix + "正在查询天气信息，请稍候...")
     weather_info = await get_weather_data(city_code)
 
     if not weather_info or not weather_info.get("weather_data"):

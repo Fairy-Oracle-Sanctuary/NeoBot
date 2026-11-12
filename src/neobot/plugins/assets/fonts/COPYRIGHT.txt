@@ -1,0 +1,12 @@
+WenQuanYi Micro Hei (文泉驿微米黑)
+Copyright 2007-2010, WenQuanYi Project Board of Trustees
+Copyright 2007-2009, Qianqian Fang and contributors
+Based in part on the Droid font family:
+Copyright 2006-2008, Google Corporation
+
+Licensed under the Apache License, Version 2.0 (see LICENSE.Apache-2.0.txt)
+or the GNU GPL v3 with the font embedding exception.
+Source: https://sourceforge.net/projects/wqy/files/wqy-microhei/
+
+NeoBot bundles this font so /加字 can draw Chinese text without relying on
+the host having a CJK font installed.

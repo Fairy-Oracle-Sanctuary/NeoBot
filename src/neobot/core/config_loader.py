@@ -8,7 +8,7 @@ from pathlib import Path
 
 import tomllib
 from pydantic import ValidationError
-from .config_models import ConfigModel, NapCatWSModel, BotModel, RedisModel, DockerModel, ImageManagerModel, MySQLModel, ReverseWSModel, ThreadingModel, BilibiliModel, DouyinModel, JinmanModel, EhentaiModel, DivingFishModel, LocalFileServerModel, DiscordModel, CrossPlatformModel, LoggingModel, McCAdapterModel, DailyModel
+from .config_models import ConfigModel, NapCatWSModel, BotModel, RedisModel, DockerModel, ImageManagerModel, MySQLModel, ReverseWSModel, ThreadingModel, BilibiliModel, DouyinModel, JinmanModel, EhentaiModel, DivingFishModel, LocalFileServerModel, DiscordModel, CrossPlatformModel, LoggingModel, McCAdapterModel, DailyModel, DiceModel, PokeModel, PollModel, CaptionModel, SaucenaoModel, E926Model, MusicModel, DailyCpModel
 from .utils.logger import ModuleLogger
 from .utils.exceptions import ConfigError, ConfigNotFoundError, ConfigValidationError
 from .utils.env_loader import env_loader
@@ -245,6 +245,38 @@ class Config:
     def daily(self) -> DailyModel:
         """获取每日小功能配置。"""
         return self._model.daily
+
+    @property
+    def dice(self) -> DiceModel:
+        return self._model.dice
+
+    @property
+    def poke(self) -> PokeModel:
+        return self._model.poke
+
+    @property
+    def poll(self) -> PollModel:
+        return self._model.poll
+
+    @property
+    def caption(self) -> CaptionModel:
+        return self._model.caption
+
+    @property
+    def saucenao(self) -> SaucenaoModel:
+        return self._model.saucenao
+
+    @property
+    def e926(self) -> E926Model:
+        return self._model.e926
+
+    @property
+    def music(self) -> MusicModel:
+        return self._model.music
+
+    @property
+    def daily_cp(self) -> DailyCpModel:
+        return self._model.daily_cp
 
     @property
     def redis(self) -> RedisModel:

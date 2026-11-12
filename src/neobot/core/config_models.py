@@ -42,6 +42,92 @@ class DailyModel(BaseModel):
     salt: str = ""
     foods: List[str] = Field(default_factory=list)
 
+
+class DiceModel(BaseModel):
+    """/r、/骰、/coc 的限制。"""
+    cooldown_seconds: int = 3
+    max_dice: int = 100
+    max_faces: int = 1000
+
+
+class PokeModel(BaseModel):
+    """戳一戳回复。poke_back 为 false 时只回文字，不回戳。"""
+    cooldown_seconds: int = 20
+    poke_back: bool = False
+
+
+class PollModel(BaseModel):
+    """群投票。未结束的投票会在 ttl_hours 后自动过期。"""
+    max_concurrent: int = 3
+    ttl_hours: int = 24
+    max_options: int = 8
+
+
+class CaptionModel(BaseModel):
+    """/加字 的文字长度上限。"""
+    max_chars: int = 36
+
+
+class SaucenaoModel(BaseModel):
+    """
+    /搜源。api_key 留空时不调用 SauceNAO，并提示尚未配置。
+    ascii2d_fallback 为备用，请求失败时只回复说明，不转发图片。
+    """
+    api_key: str = ""
+    min_similarity: float = 55
+    num_results: int = 6
+    ascii2d_fallback: bool = True
+    timeout: int = 15
+
+
+class E926Model(BaseModel):
+    """
+    /兽图 与带标签的 /furry。e926 本身是 SFW 站点。
+    username / api_key 可留空，留空时以访客身份请求。
+    """
+    user_agent: str = "NeoBot/1.0 (QQ furry group bot; contact: local-operator)"
+    username: str = ""
+    api_key: str = ""
+    rate_limit_seconds: int = 8
+    max_count: int = 3
+    blacklist: List[str] = Field(
+        default_factory=lambda: [
+            "cub",
+            "young",
+            "child",
+            "loli",
+            "shota",
+            "toddler",
+            "baby",
+            "diaper",
+            "gore",
+            "scat",
+            "watersports",
+            "urine",
+        ]
+    )
+
+
+class MusicModel(BaseModel):
+    """
+    /点歌。
+
+    base_url 留空时使用 public_base（网易云 API 兼容接口）。
+    api_style=ncm 走 /search 与 /song/url；api_style=netease_url 走旧的本地 POST 协议。
+    play_url_template 只在 ncm 拿不到直链时使用，{id} 会换成歌曲 ID。留空则不兜底。
+    """
+    base_url: str = ""
+    public_base: str = "https://netease-cloud-music-api-psi-azure.vercel.app"
+    api_style: str = "ncm"
+    play_url_template: str = "https://api.injahow.cn/meting/?server=netease&type=url&id={id}"
+    link_card: bool = True
+    timeout: int = 12
+
+
+class DailyCpModel(BaseModel):
+    """/今日CP 的盐。换掉会使同一天的配对改变。不是密钥。"""
+    salt: str = ""
+
 class ReverseWSModel(BaseModel):
     """
     对应 `config.toml` 中的 `[reverse_ws]` 配置块。
@@ -314,3 +400,11 @@ class ConfigModel(BaseModel):
     logging: LoggingModel = Field(default_factory=LoggingModel)
     mcc_adapter: McCAdapterModel = Field(default_factory=McCAdapterModel)
     daily: DailyModel = Field(default_factory=DailyModel)
+    dice: DiceModel = Field(default_factory=DiceModel)
+    poke: PokeModel = Field(default_factory=PokeModel)
+    poll: PollModel = Field(default_factory=PollModel)
+    caption: CaptionModel = Field(default_factory=CaptionModel)
+    saucenao: SaucenaoModel = Field(default_factory=SaucenaoModel)
+    e926: E926Model = Field(default_factory=E926Model)
+    music: MusicModel = Field(default_factory=MusicModel)
+    daily_cp: DailyCpModel = Field(default_factory=DailyCpModel)
