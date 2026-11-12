@@ -14,7 +14,7 @@ logger = ModuleLogger("osu_plugin")
 plugin_manifest = define_plugin(
     name="osu_plugin",
     description="osu! 综合工具：谱面重算难度 + 难度查询",
-    usage="/omm <链接/bid> | /难度 <链接/bid>",
+    usage="/osu（别名 /omm）<链接或谱面ID> - 重算 mania 难度\n/难度 <链接或谱面ID>",
 )
 
 SLOW_THRESHOLD_MS = 5000
@@ -189,7 +189,7 @@ async def _process_beatmap_query(event: MessageEvent, user_input: str, build_tex
 
 # ── Command Handlers ─────────────────────────────────────────────
 
-@platform_command(["qq", "discord"], "omm")
+@platform_command(["qq", "discord"], "omm", "osu")
 async def omm_handler(bot: Bot, event: MessageEvent, args: List[str]):
     user_input = " ".join(args).strip()
     if not user_input:

@@ -1,21 +1,14 @@
 # -*- coding: utf-8 -*-
-import re
+"""GitHub 仓库查询的旧实现。
+
+/查仓库 只在 web_parser 里注册，这里不再挂指令，避免两个插件抢同一个命令。
+"""
 import json
 import aiohttp
 from typing import Optional, Dict, Any
 from cachetools import TTLCache
-from neobot.plugin_api import logger, platform_command, image_manager, define_plugin
+from neobot.plugin_api import logger, image_manager
 from neobot.models import MessageEvent, MessageSegment
-
-# 插件元数据
-plugin_manifest = define_plugin(
-    name="github_parser",
-    description="自动解析GitHub仓库链接，或通过命令查询仓库信息。",
-    usage="（自动触发）当检测到GitHub仓库链接时，自动发送仓库信息。\n（命令触发）/查仓库 作者/仓库名",
-)
-
-# 常量定义
-GITHUB_NICKNAME = "GitHub仓库信息"
 
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
@@ -159,36 +152,3 @@ async def process_github_repo(event: MessageEvent, owner: str, repo: str):
         logger.error(f"[github_parser] 处理仓库信息时发生错误: {e}")
         await event.reply("处理仓库信息时发生错误，请稍后再试。")
 
-
-# GitHub仓库链接正则表达式
-GITHUB_URL_PATTERN = re.compile(r"https?://(?:www\.)?github\.com/([\w\-]+)/([\w\-\.]+)(?:/[^\s]*)?")
-
-
-# 注册命令处理器
-@platform_command(["qq", "discord"], "查仓库", "github", "github_repo")
-async def handle_github_command(bot, event: MessageEvent):
-    """
-    处理命令调用：/查仓库 作者/仓库名
-    
-    Args:
-        bot: 机器人对象
-        event (MessageEvent): 消息事件对象
-    """
-    # 提取命令参数
-    command_text = event.raw_message
-    # 移除命令前缀和命令名
-    prefix = command_text.split()[0] if command_text.split() else ""
-    params = command_text[len(prefix):].strip()
-    
-    if not params:
-        await event.reply("请输入仓库地址，格式：/查仓库 作者/仓库名")
-        return
-    
-    # 解析参数格式
-    if "/" in params:
-        owner, repo = params.split("/", 1)
-        # 移除可能的.git后缀
-        repo = repo.replace(".git", "")
-        await process_github_repo(event, owner, repo)
-    else:
-        await event.reply("参数格式错误，请输入：/查仓库 作者/仓库名")

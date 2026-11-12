@@ -18,6 +18,8 @@ from neobot.plugin_api import (
     platform_command,
 )
 
+from .mentions import mentioned_user_ids
+
 logger = ModuleLogger("Daily")
 
 plugin_manifest = define_plugin(
@@ -25,6 +27,7 @@ plugin_manifest = define_plugin(
     description="每天的一点小事：运势和今天吃什么",
     usage=(
         "/今日运势（别名 /运势）- 看看今天的运势，同一个人同一天结果不变\n"
+        "/今日运势 @人 - 看 TA 今天的运势\n"
         "/今天吃什么（别名 /吃什么、/今日吃什么）- 从菜单里挑一个"
     ),
     version="0.1.0",
@@ -103,10 +106,22 @@ def _foods() -> list:
         return []
 
 
+def fortune_subject(event: MessageEvent) -> tuple[int, bool]:
+    """返回 (要看谁的运势, 是不是在看别人)。"""
+    caller = int(getattr(event, "user_id", 0) or 0)
+    mentions = mentioned_user_ids(getattr(event, "message", None))
+    if mentions:
+        return mentions[0], mentions[0] != caller
+    return caller, False
+
+
 @platform_command(["qq", "discord"], "今日运势", "运势")
 async def handle_fortune(bot, event: MessageEvent, args: list):
-    user_id = int(getattr(event, "user_id", 0) or 0)
-    await event.reply(fortune_text(user_id, _today(), _salt()))
+    user_id, viewing_other = fortune_subject(event)
+    text = fortune_text(user_id, _today(), _salt())
+    if viewing_other:
+        text = "这是 TA 今天的运势：\n" + text
+    await event.reply(text)
 
 
 @platform_command(["qq", "discord"], "今天吃什么", "吃什么", "今日吃什么")

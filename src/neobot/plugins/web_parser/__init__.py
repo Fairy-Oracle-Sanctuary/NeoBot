@@ -10,7 +10,7 @@ from .parsers.xhs import XhsParser
 plugin_manifest = define_plugin(
     name="web_parser",
     description="自动解析各种Web链接，包括B站、抖音、小红书和GitHub仓库",
-    usage="（自动触发）当检测到支持的链接时，自动进行解析",
+    usage="（自动触发）当检测到支持的链接时，自动进行解析\n/查仓库 作者/仓库名 - 查询 GitHub 仓库",
 )
 
 # 初始化解析器实例
