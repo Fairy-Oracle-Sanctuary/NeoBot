@@ -7,6 +7,7 @@
 当前可管理功能：
   - 视频解析（video_parse）：自动解析 B站/抖音/小红书/GitHub 等链接
   - 主动推送（push）：跨平台互通转发、入群提醒等机器人主动发送的消息
+  - 戳一戳（poke）：被戳时回复一句
 
 存储：Redis hash  `neobot:group:settings:{group_id}`，field=功能key，value="1"/"0"。
 未设置一律视为开启（默认全开，管理员可关闭）。
@@ -18,6 +19,7 @@ from neobot.plugin_api import platform_command, redis_manager, logger
 FEATURES = {
     "video_parse": "视频解析",
     "push": "主动推送",
+    "poke": "戳一戳",
 }
 
 # 功能别名 -> 功能 key（兼容 "视频解析"/"解析"/"链接解析" 等叫法）
@@ -29,6 +31,8 @@ FEATURE_ALIASES = {
     "推送": "push",
     "互通": "push",
     "互通转发": "push",
+    "戳一戳": "poke",
+    "戳": "poke",
 }
 
 ADMIN_ROLES = ("owner", "admin")
