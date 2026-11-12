@@ -60,7 +60,7 @@ async def get_github_repo_info(owner: str, repo: str) -> Optional[Dict[str, Any]
     api_url = f"https://api.github.com/repos/{owner}/{repo}"
     try:
         session = get_session()
-        async with session.get(api_url, timeout=10) as response:
+        async with session.get(api_url, timeout=aiohttp.ClientTimeout(total=10)) as response:
             response.raise_for_status()
             repo_data = await response.json()
             

@@ -413,7 +413,7 @@ async def resolve_short_url(url: str) -> Optional[str]:
     """跟随 t.co 短链跳转，返回最终 URL。"""
     try:
         session = await _get_session()
-        async with session.get(url, allow_redirects=True, timeout=10) as response:
+        async with session.get(url, allow_redirects=True, timeout=aiohttp.ClientTimeout(total=10)) as response:
             final_url = str(response.url)
             return final_url if final_url != url else None
     except (aiohttp.ClientError, asyncio.TimeoutError) as e:

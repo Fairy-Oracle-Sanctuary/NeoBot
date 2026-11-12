@@ -153,7 +153,11 @@ class MessageAPI(BaseAPI):
         Returns:
             Dict[str, Any]: OneBot API 的响应数据。
         """
-        return await self.call_api("send_group_forward_msg", {"group_id": group_id, "messages": messages})
+        return await self.call_api(
+            "send_group_forward_msg",
+            {"group_id": group_id, "messages": messages},
+            strict=True,
+        )
 
     async def send_private_forward_msg(self, user_id: int, messages: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
@@ -166,4 +170,8 @@ class MessageAPI(BaseAPI):
         Returns:
             Dict[str, Any]: OneBot API 的响应数据。
         """
-        return await self.call_api("send_private_forward_msg", {"user_id": user_id, "messages": messages})
+        return await self.call_api(
+            "send_private_forward_msg",
+            {"user_id": user_id, "messages": messages},
+            strict=True,
+        )
