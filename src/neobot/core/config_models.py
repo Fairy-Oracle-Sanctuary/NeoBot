@@ -176,6 +176,13 @@ class DockerModel(BaseModel):
     client_key_path: Optional[str] = None
 
 
+class BirthdayModel(BaseModel):
+    """生日提醒。只存月-日，不存年份。"""
+    hour: int = 9
+    window_hours: int = 3
+    lookahead_days: int = 30
+
+
 class ChattyModel(BaseModel):
     """话痨榜只记条数。retain_days 要盖住「本周」。"""
     top_n: int = 10
@@ -426,6 +433,7 @@ class ConfigModel(BaseModel):
     link_cache: LinkCacheModel = Field(default_factory=LinkCacheModel)
     reminder: ReminderModel = Field(default_factory=ReminderModel)
     chatty: ChattyModel = Field(default_factory=ChattyModel)
+    birthday: BirthdayModel = Field(default_factory=BirthdayModel)
     image_manager: ImageManagerModel
     reverse_ws: ReverseWSModel
     threading: ThreadingModel = Field(default_factory=ThreadingModel)

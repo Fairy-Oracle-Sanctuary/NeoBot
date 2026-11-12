@@ -40,6 +40,14 @@ concurrency_limit = 5
 # 只有准备好镜像并且明确要开放时才改成 true。不要为了这个去挂载 docker.sock。
 enabled = false
 
+[birthday]
+# 每天这个钟点（Asia/Shanghai）给本群过生日的人一句祝福。只存月-日。
+hour = 9
+# 如果 9 点那会儿机器人不在，这几个小时内补上
+window_hours = 3
+# /生日列表 看未来多少天
+lookahead_days = 30
+
 [chatty]
 # /今日话痨 /本周话痨。只记条数，不记内容。retain_days 至少 7，方便算一周。
 top_n = 10
