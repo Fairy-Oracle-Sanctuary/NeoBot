@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import re
 from typing import Any, Optional
+from urllib.parse import urlparse
 import aiohttp
 from cachetools import TTLCache
 
@@ -42,6 +43,7 @@ _YOUTUBE_ID = re.compile(
     re.IGNORECASE,
 )
 _KUGOU_HASH = re.compile(r"(?:hash=)([0-9A-Fa-f]{32})", re.IGNORECASE)
+_HTTP_URL = re.compile(r"https?://[^\s<>]+", re.IGNORECASE)
 
 
 class MusicBackendError(Exception):
@@ -63,6 +65,15 @@ def play_url_from_template(template: str, song_id) -> str:
     if not text or "{id}" not in text:
         return ""
     return text.replace("{id}", str(song_id))
+
+
+def host_is(url: str, domain: str) -> bool:
+    try:
+        host = (urlparse(url).hostname or "").lower().rstrip(".")
+    except ValueError:
+        return False
+    name = domain.lower().rstrip(".")
+    return bool(host) and (host == name or host.endswith("." + name))
 
 
 def find_song_links(text: str) -> list[dict]:
@@ -87,11 +98,13 @@ def find_song_links(text: str) -> list[dict]:
         start = source.rfind("http", 0, match.start())
         page = source[start:].split()[0] if start >= 0 else f"https://youtu.be/{match.group(1)}"
         add("youtube", match.group(1), page)
-    if "kugou.com" in source.lower():
-        for match in _KUGOU_HASH.finditer(source):
-            start = source.rfind("http", 0, match.start())
-            page = source[start:].split()[0] if start >= 0 else f"https://www.kugou.com/song/#hash={match.group(1)}"
-            add("kugou", match.group(1).upper(), page)
+    for match in _HTTP_URL.finditer(source):
+        page = match.group(0).rstrip(").,，")
+        if not host_is(page, "kugou.com"):
+            continue
+        hashed = _KUGOU_HASH.search(page)
+        if hashed:
+            add("kugou", hashed.group(1).upper(), page)
     return found
 
 

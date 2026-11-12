@@ -4,6 +4,7 @@ from __future__ import annotations
 import importlib
 import random
 from datetime import datetime, timezone
+from urllib.parse import urlparse
 
 import pytest
 
@@ -202,7 +203,7 @@ def test_saucenao_hides_nsfw_and_reports_quota():
     assert error is None
     assert len(kept) == 1
     assert kept[0]["author"] == "桃"
-    assert "pixiv.net" in kept[0]["links"][0]
+    assert urlparse(kept[0]["links"][0]).hostname == "www.pixiv.net"
     text = image_source.format_source_reply(kept, "SauceNAO")
     assert "相似度" in text
     assert "作者：桃" in text
@@ -222,7 +223,7 @@ def test_saucenao_hides_nsfw_and_reports_quota():
     parsed = image_source.parse_ascii2d_html(html)
     assert parsed[0]["links"] == ["https://www.pixiv.net/artworks/9"]
     assert parsed[0]["author"] == "作者甲"
-    assert all("nhentai" not in item["links"][0] for item in parsed)
+    assert all(urlparse(item["links"][0]).hostname != "nhentai.net" for item in parsed)
 
 
 def test_caption_wraps_and_renders_cjk():

@@ -4,7 +4,7 @@ from __future__ import annotations
 import asyncio
 import re
 from typing import Iterable
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 import aiohttp
 
@@ -33,26 +33,44 @@ plugin_manifest = define_plugin(
     version="0.1.0",
 )
 
-_NSFW_HINTS = (
-    "nhentai",
-    "e-hentai",
-    "exhentai",
-    "rule34",
-    "gelbooru",
-    "sankaku",
-    "xvideos",
-    "pornhub",
-    "r18",
-    "r-18",
-    "nsfw",
-    "explicit",
+_NSFW_HOSTS = (
+    "nhentai.net",
+    "e-hentai.org",
+    "exhentai.org",
+    "rule34.xxx",
+    "rule34.paheal.net",
+    "gelbooru.com",
+    "sankakucomplex.com",
+    "xvideos.com",
+    "pornhub.com",
 )
+_NSFW_PATH_MARKERS = ("r18", "r-18", "nsfw", "explicit")
 _waiting: dict[int, asyncio.Task] = {}
 
 
+def hostname_of(url: str) -> str:
+    try:
+        return (urlparse(url).hostname or "").lower().rstrip(".")
+    except ValueError:
+        return ""
+
+
+def host_is(url: str, domain: str) -> bool:
+    """主机名等于 domain，或是它的子域名。不在整段 URL 里做子串匹配。"""
+    host = hostname_of(url)
+    name = domain.lower().rstrip(".")
+    return bool(host) and (host == name or host.endswith("." + name))
+
+
 def url_is_nsfw(url: str) -> bool:
-    lowered = (url or "").lower()
-    return any(hint in lowered for hint in _NSFW_HINTS)
+    if any(host_is(url, domain) for domain in _NSFW_HOSTS):
+        return True
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return False
+    haystack = f"{parsed.path} {parsed.query}".lower()
+    return any(marker in haystack for marker in _NSFW_PATH_MARKERS)
 
 
 def saucenao_error_message(header: dict) -> str | None:
@@ -158,7 +176,7 @@ def parse_ascii2d_html(html: str) -> list[dict]:
         links = re.findall(r'href="(https?://[^"]+)"[^>]*>(.*?)</a>', chunk, flags=re.S)
         external = []
         for url, text in links:
-            if "ascii2d.net" in url or url_is_nsfw(url):
+            if host_is(url, "ascii2d.net") or url_is_nsfw(url):
                 continue
             title = re.sub(r"<[^>]+>", "", text)
             title = re.sub(r"\s+", " ", title).strip()
