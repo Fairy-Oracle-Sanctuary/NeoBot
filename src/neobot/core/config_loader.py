@@ -8,7 +8,7 @@ from pathlib import Path
 
 import tomllib
 from pydantic import ValidationError
-from .config_models import ConfigModel, NapCatWSModel, BotModel, RedisModel, DockerModel, CodePyModel, ImageManagerModel, MySQLModel, ReverseWSModel, ThreadingModel, BilibiliModel, DouyinModel, JinmanModel, EhentaiModel, DivingFishModel, LocalFileServerModel, DiscordModel, CrossPlatformModel, LoggingModel, McCAdapterModel, DailyModel, DiceModel, PokeModel, PollModel, CaptionModel, SaucenaoModel, E926Model, MusicModel, DailyCpModel
+from .config_models import ConfigModel, NapCatWSModel, BotModel, RedisModel, DockerModel, CodePyModel, LinkCacheModel, ImageManagerModel, MySQLModel, ReverseWSModel, ThreadingModel, BilibiliModel, DouyinModel, JinmanModel, EhentaiModel, DivingFishModel, LocalFileServerModel, DiscordModel, CrossPlatformModel, LoggingModel, McCAdapterModel, DailyModel, DiceModel, PokeModel, PollModel, CaptionModel, SaucenaoModel, E926Model, MusicModel, DailyCpModel
 from .utils.logger import ModuleLogger, apply_retention_days, resolve_retention_days
 from .utils.exceptions import ConfigError, ConfigNotFoundError, ConfigValidationError
 from .utils.env_loader import env_loader
@@ -308,6 +308,11 @@ class Config:
     def code_py(self) -> CodePyModel:
         """获取 /py 沙箱开关。默认关闭。"""
         return self._model.code_py
+
+    @property
+    def link_cache(self) -> LinkCacheModel:
+        """获取链接解析缓存配置。"""
+        return self._model.link_cache
     
     @property
     def image_manager(self) -> ImageManagerModel:

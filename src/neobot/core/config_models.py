@@ -176,6 +176,19 @@ class DockerModel(BaseModel):
     client_key_path: Optional[str] = None
 
 
+class LinkCacheModel(BaseModel):
+    """
+    链接解析缓存。
+
+    ttl_seconds：解析结果保留多久。
+    dedupe_seconds：同一群同一链接在这段时间内不重复解析、不重复发送。
+    max_items：内存 LRU 上限。Redis 侧靠 TTL 回收。
+    """
+    ttl_seconds: int = 600
+    dedupe_seconds: int = 180
+    max_items: int = 256
+
+
 class CodePyModel(BaseModel):
     """
     对应 `config.toml` 中的 `[code_py]` 配置块。
@@ -397,6 +410,7 @@ class ConfigModel(BaseModel):
     mysql: MySQLModel
     docker: DockerModel
     code_py: CodePyModel = Field(default_factory=CodePyModel)
+    link_cache: LinkCacheModel = Field(default_factory=LinkCacheModel)
     image_manager: ImageManagerModel
     reverse_ws: ReverseWSModel
     threading: ThreadingModel = Field(default_factory=ThreadingModel)

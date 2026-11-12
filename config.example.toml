@@ -40,6 +40,14 @@ concurrency_limit = 5
 # 只有准备好镜像并且明确要开放时才改成 true。不要为了这个去挂载 docker.sock。
 enabled = false
 
+[link_cache]
+# 解析结果缓存（秒）。Redis 可用时放 Redis，否则用内存 LRU。
+ttl_seconds = 600
+# 同一群同一链接在这段时间内不重复解析、不重复发送
+dedupe_seconds = 180
+# 内存缓存条数上限
+max_items = 256
+
 [image_manager]
 image_height = 1920
 image_width = 1080
