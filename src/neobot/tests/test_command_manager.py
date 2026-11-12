@@ -90,24 +90,50 @@ async def test_ignore_self_message(command_manager, mock_bot):
 
 @pytest.mark.asyncio
 async def test_help_command(command_manager, mock_bot):
-    """测试内置 help 命令"""
-    # 注册一个测试插件信息
+    """测试内置 help 命令。图片失败时，文字里仍有插件名和说明。"""
     command_manager.plugins["test_plugin"] = {
         "name": "测试插件",
         "description": "这是一个测试",
         "usage": "/test"
     }
-    
+
     event = MagicMock(spec=GroupMessageEvent)
     event.post_type = "message"
     event.raw_message = "/help"
     event.message = [MessageSegment.text("/help")]
-    
-    await command_manager.handle_event(mock_bot, event)
-    
-    # 验证 bot.send 被调用，且内容包含插件信息
+
+    with patch.object(command_manager, "_render_help_image", AsyncMock(return_value=None)):
+        await command_manager.handle_event(mock_bot, event)
+
     mock_bot.send.assert_called_once()
     args, _ = mock_bot.send.call_args
     sent_msg = args[1]
     assert "测试插件" in sent_msg
     assert "这是一个测试" in sent_msg
+
+
+@pytest.mark.asyncio
+async def test_help_alias_and_single_plugin(command_manager, mock_bot):
+    command_manager.plugins["weather"] = {
+        "name": "weather",
+        "description": "查询天气信息",
+        "usage": "/天气 南京",
+    }
+    event = MagicMock(spec=GroupMessageEvent)
+    event.post_type = "message"
+    event.raw_message = "/帮助 天气"
+    event.message = [MessageSegment.text("/帮助 天气")]
+    rendered = {}
+
+    async def _render(view):
+        rendered["view"] = view
+        return "data:image/png;base64,aGk="
+
+    with patch.object(command_manager, "_render_help_image", _render):
+        await command_manager.handle_event(mock_bot, event)
+
+    assert rendered["view"].kind == "plugin"
+    assert rendered["view"].plugins[0].label == "天气"
+    mock_bot.send.assert_called_once()
+    assert "help" in command_manager.message_handler.commands
+    assert "帮助" in command_manager.message_handler.commands

@@ -36,6 +36,7 @@ plugin_manifest = define_plugin(
     author="镀铬酸钾",
     api_version="1",           # 声明契约版本 -> 成为"新式契约插件"
     dependencies=[],           # 依赖的其他插件名
+    category="",               # 可选：/help 分类，如 工具 / 娱乐 / 群管理 / 信息查询 / 游戏 / 系统
 )
 ```
 

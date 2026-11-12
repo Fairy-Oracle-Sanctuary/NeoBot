@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>功能列表</title>
+    <title>{{ title }}</title>
     <style>
         {% include "theme.css" %}
     </style>
@@ -10,17 +10,26 @@
 <body>
     <div class="nb-page">
         <div>
-            <h1 class="nb-title">功能列表</h1>
-            <p class="nb-subtitle">已加载 {{ plugins|length }} 个模块</p>
+            <h1 class="nb-title">{{ title }}</h1>
+            {% if subtitle %}<p class="nb-subtitle">{{ subtitle }}</p>{% endif %}
         </div>
-        {% for plugin in plugins %}
-        <section class="nb-card">
-            <h2 class="nb-card-title">{{ plugin.name }}</h2>
-            <p class="nb-body">{{ plugin.description }}</p>
-            <pre class="nb-cmd">{{ plugin.usage }}</pre>
-        </section>
-        {% endfor %}
-        <p class="nb-footnote">发送 /help 可以再打开这份列表</p>
+        {% if mode == "overview" %}
+            {% for category in categories %}
+            <section class="nb-card">
+                <h2 class="nb-card-title">{{ category.name }} · {{ category.count }}</h2>
+                <p class="nb-body">{{ category.names }}</p>
+            </section>
+            {% endfor %}
+        {% else %}
+            {% for plugin in plugins %}
+            <section class="nb-card">
+                <h2 class="nb-card-title">{{ plugin.name }}</h2>
+                <p class="nb-body">{{ plugin.description }}</p>
+                <pre class="nb-cmd">{{ plugin.usage }}</pre>
+            </section>
+            {% endfor %}
+        {% endif %}
+        {% if footer %}<p class="nb-footnote">{{ footer }}</p>{% endif %}
     </div>
 </body>
 </html>
