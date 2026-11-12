@@ -148,6 +148,42 @@ foods = ["番茄炒蛋", "味噌拉面", "葱油拌面", "小笼包"]
 # /今日CP 的盐。换掉会使同一天的配对改变。不是密钥，可以留空。
 salt = ""
 
+[daily_news]
+# 每天早上把国际快讯和时事新闻送到 groups 里的群。默认关闭。
+# 真实群号只写在服务器的 config.toml，不要写进仓库、示例或测试。
+# 未列入的群发送 /早报 时保持沉默。今日猪猪、我的猪圈仍是别的机器人的指令，继续忽略。
+enabled = false
+groups = []
+time = "08:00"
+timezone = "Asia/Shanghai"
+max_items_international = 8
+max_items_domestic = 6
+request_timeout = 12
+# 合并转发失败时改发一条普通文字
+send_as_forward = true
+# 同一个群手动 /早报 的最短间隔（秒）
+manual_cooldown_seconds = 600
+# 删掉下面的 [[daily_news.sources]]，或写成 sources = []，就用插件内置的同一批地址。
+# 2026-11-12 核对过：下面三条中新网 RSS 能解析，而且是当天的条目。
+# 人民网 https://www.people.com.cn/rss/world.xml 和 politics.xml 能打开，但条目停在 2025-06。
+# 新华网 https://www.news.cn/world/news_world.xml 和 politics 能打开，但条目停在 2022，且没有日期。
+# 这两家不放进默认列表，避免把旧闻当成早报。需要的话再填仍在更新的地址。
+
+[[daily_news.sources]]
+name = "中新网国际"
+url = "https://www.chinanews.com.cn/rss/world.xml"
+category = "international"
+
+[[daily_news.sources]]
+name = "中新网国内"
+url = "https://www.chinanews.com.cn/rss/china.xml"
+category = "domestic"
+
+[[daily_news.sources]]
+name = "中新网社会"
+url = "https://www.chinanews.com.cn/rss/society.xml"
+category = "domestic"
+
 [dice]
 # 同一群两次掷骰的最小间隔（秒）
 cooldown_seconds = 3

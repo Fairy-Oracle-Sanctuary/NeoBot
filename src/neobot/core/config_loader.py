@@ -8,7 +8,7 @@ from pathlib import Path
 
 import tomllib
 from pydantic import ValidationError
-from .config_models import ConfigModel, NapCatWSModel, BotModel, RedisModel, DockerModel, CodePyModel, LinkCacheModel, ReminderModel, ChattyModel, BirthdayModel, ImageManagerModel, MySQLModel, ReverseWSModel, ThreadingModel, BilibiliModel, DouyinModel, JinmanModel, EhentaiModel, DivingFishModel, LocalFileServerModel, DiscordModel, CrossPlatformModel, LoggingModel, McCAdapterModel, DailyModel, DiceModel, PokeModel, PollModel, CaptionModel, SaucenaoModel, E926Model, MusicModel, DailyCpModel
+from .config_models import ConfigModel, NapCatWSModel, BotModel, RedisModel, DockerModel, CodePyModel, LinkCacheModel, ReminderModel, ChattyModel, BirthdayModel, ImageManagerModel, MySQLModel, ReverseWSModel, ThreadingModel, BilibiliModel, DouyinModel, JinmanModel, EhentaiModel, DivingFishModel, LocalFileServerModel, DiscordModel, CrossPlatformModel, LoggingModel, McCAdapterModel, DailyModel, DiceModel, PokeModel, PollModel, CaptionModel, SaucenaoModel, E926Model, MusicModel, DailyCpModel, DailyNewsModel
 from .utils.logger import ModuleLogger, apply_retention_days, resolve_retention_days
 from .utils.exceptions import ConfigError, ConfigNotFoundError, ConfigValidationError
 from .utils.env_loader import env_loader
@@ -282,6 +282,11 @@ class Config:
     @property
     def daily_cp(self) -> DailyCpModel:
         return self._model.daily_cp
+
+    @property
+    def daily_news(self) -> DailyNewsModel:
+        """获取早报配置。未写 [daily_news] 时使用默认值（关闭）。"""
+        return self._model.daily_news
 
     @property
     def redis(self) -> RedisModel:
