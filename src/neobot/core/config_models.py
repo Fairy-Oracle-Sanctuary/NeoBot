@@ -176,6 +176,12 @@ class DockerModel(BaseModel):
     client_key_path: Optional[str] = None
 
 
+class ChattyModel(BaseModel):
+    """话痨榜只记条数。retain_days 要盖住「本周」。"""
+    top_n: int = 10
+    retain_days: int = 8
+
+
 class ReminderModel(BaseModel):
     """/提醒 的上限。时间按 Asia/Shanghai。"""
     max_per_user: int = 8
@@ -419,6 +425,7 @@ class ConfigModel(BaseModel):
     code_py: CodePyModel = Field(default_factory=CodePyModel)
     link_cache: LinkCacheModel = Field(default_factory=LinkCacheModel)
     reminder: ReminderModel = Field(default_factory=ReminderModel)
+    chatty: ChattyModel = Field(default_factory=ChattyModel)
     image_manager: ImageManagerModel
     reverse_ws: ReverseWSModel
     threading: ThreadingModel = Field(default_factory=ThreadingModel)

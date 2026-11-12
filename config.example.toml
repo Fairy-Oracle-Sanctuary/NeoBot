@@ -40,6 +40,11 @@ concurrency_limit = 5
 # 只有准备好镜像并且明确要开放时才改成 true。不要为了这个去挂载 docker.sock。
 enabled = false
 
+[chatty]
+# /今日话痨 /本周话痨。只记条数，不记内容。retain_days 至少 7，方便算一周。
+top_n = 10
+retain_days = 8
+
 [reminder]
 # /提醒 的上限。时间用 Asia/Shanghai。
 max_per_user = 8

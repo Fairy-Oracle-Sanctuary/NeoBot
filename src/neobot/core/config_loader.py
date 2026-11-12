@@ -8,7 +8,7 @@ from pathlib import Path
 
 import tomllib
 from pydantic import ValidationError
-from .config_models import ConfigModel, NapCatWSModel, BotModel, RedisModel, DockerModel, CodePyModel, LinkCacheModel, ReminderModel, ImageManagerModel, MySQLModel, ReverseWSModel, ThreadingModel, BilibiliModel, DouyinModel, JinmanModel, EhentaiModel, DivingFishModel, LocalFileServerModel, DiscordModel, CrossPlatformModel, LoggingModel, McCAdapterModel, DailyModel, DiceModel, PokeModel, PollModel, CaptionModel, SaucenaoModel, E926Model, MusicModel, DailyCpModel
+from .config_models import ConfigModel, NapCatWSModel, BotModel, RedisModel, DockerModel, CodePyModel, LinkCacheModel, ReminderModel, ChattyModel, ImageManagerModel, MySQLModel, ReverseWSModel, ThreadingModel, BilibiliModel, DouyinModel, JinmanModel, EhentaiModel, DivingFishModel, LocalFileServerModel, DiscordModel, CrossPlatformModel, LoggingModel, McCAdapterModel, DailyModel, DiceModel, PokeModel, PollModel, CaptionModel, SaucenaoModel, E926Model, MusicModel, DailyCpModel
 from .utils.logger import ModuleLogger, apply_retention_days, resolve_retention_days
 from .utils.exceptions import ConfigError, ConfigNotFoundError, ConfigValidationError
 from .utils.env_loader import env_loader
@@ -318,6 +318,11 @@ class Config:
     def reminder(self) -> ReminderModel:
         """获取定时提醒的上限。"""
         return self._model.reminder
+
+    @property
+    def chatty(self) -> ChattyModel:
+        """获取话痨榜的条数和保留天数。"""
+        return self._model.chatty
     
     @property
     def image_manager(self) -> ImageManagerModel:

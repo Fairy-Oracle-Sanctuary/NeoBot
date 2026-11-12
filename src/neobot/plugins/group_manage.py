@@ -9,6 +9,7 @@
   - 主动推送（push）：跨平台互通转发、入群提醒等机器人主动发送的消息
   - 戳一戳（poke）：被戳时回复一句
   - 定时提醒（reminder）：/提醒 到点在群里 @ 发起人
+  - 话痨榜（chatty）：统计每天发言条数，不保存内容
 
 存储：Redis hash  `neobot:group:settings:{group_id}`，field=功能key，value="1"/"0"。
 未设置一律视为开启（默认全开，管理员可关闭）。
@@ -22,6 +23,7 @@ FEATURES = {
     "push": "主动推送",
     "poke": "戳一戳",
     "reminder": "定时提醒",
+    "chatty": "话痨榜",
 }
 
 # 功能别名 -> 功能 key（兼容 "视频解析"/"解析"/"链接解析" 等叫法）
@@ -38,6 +40,9 @@ FEATURE_ALIASES = {
     "定时提醒": "reminder",
     "提醒": "reminder",
     "schedule": "reminder",
+    "话痨榜": "chatty",
+    "话痨": "chatty",
+    "发言统计": "chatty",
 }
 
 ADMIN_ROLES = ("owner", "admin")
