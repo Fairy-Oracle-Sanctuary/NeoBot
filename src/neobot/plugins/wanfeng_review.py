@@ -14,6 +14,7 @@ import asyncio
 from typing import Dict, List
 from neobot.plugin_api import (
     bot_manager,
+    global_config,
     logger,
     mcc_manager,
     on_shutdown,
@@ -104,8 +105,11 @@ async def _poll_loop() -> None:
 
 @on_startup
 async def start() -> bool:
-    """启动后台审核轮询任务。"""
+    """启动后台审核轮询任务。MCC 关闭时不启动，避免每 30 秒探测 8800。"""
     global _tasks, _running
+    if not global_config.mcc_adapter.enabled:
+        logger.info("[审核] mcc_adapter 未启用，跳过租赁审核轮询")
+        return False
     if _running:
         return True
     _running = True

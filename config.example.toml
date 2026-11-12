@@ -110,6 +110,8 @@ console_level = "INFO"
 retention_days = 7
 
 [mcc_adapter]
+# 8800 上的 mcc-service 已下线。保持 false：适配器不会启动，也不会去探测该端口。
+# 若生产 config.toml 里写成了 true，请改回 false，否则日志会持续出现「MCC 服务不可达」。
 enabled = false
 service_url = "http://127.0.0.1:8800"
 service_token = "replace-me"
