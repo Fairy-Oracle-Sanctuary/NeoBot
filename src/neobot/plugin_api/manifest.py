@@ -44,6 +44,8 @@ class PluginManifest:
     api_version: str = API_VERSION
     #: 依赖的其他插件名
     dependencies: List[str] = field(default_factory=list)
+    #: /help 分类。留空时由帮助页按插件信息归类，归不上的进「其他」。
+    category: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         """转为 dict,兼容旧版 ``__plugin_meta__`` 的消费方(如 /help)。"""
@@ -58,6 +60,7 @@ def define_plugin(
     author: str = "",
     api_version: str = API_VERSION,
     dependencies: Optional[List[str]] = None,
+    category: str = "",
 ) -> PluginManifest:
     """
     声明插件清单。对关键字段做合法性校验,尽早暴露拼写错误。
@@ -84,6 +87,7 @@ def define_plugin(
         author=author,
         api_version=api_version,
         dependencies=list(dependencies or []),
+        category=(category or "").strip(),
     )
 
 

@@ -265,3 +265,46 @@ def test_package_init_maps_to_package_module_name():
         "neobot.plugins.discord_cross"
     )
     assert main.plugin_module_name_from_path(plugin_path("__init__.py")) is None
+    assert main.plugin_module_name_from_path(plugin_path("web_parser", "link_cache.py")) is None
+    assert main.plugin_module_name_from_path(plugin_path("web_parser", "__init__.py")) == (
+        "neobot.plugins.web_parser"
+    )
+
+
+def test_watchdog_ignores_helper_modules_and_non_write_events(monkeypatch):
+    import main
+
+    scheduled = []
+
+    def _capture(coro, loop):
+        scheduled.append(getattr(coro, "cr_code", None) and coro)
+        close = getattr(coro, "close", None)
+        if close:
+            close()
+        return MagicMock()
+
+    monkeypatch.setattr(main.asyncio, "run_coroutine_threadsafe", _capture)
+    handler = main.PluginReloadHandler(MagicMock())
+
+    opened = MagicMock()
+    opened.is_directory = False
+    opened.event_type = "opened"
+    opened.src_path = os.path.join(main.PLUGIN_DIR, "echo.py")
+    handler.on_any_event(opened)
+    assert scheduled == []
+
+    handler.last_reload_time = 0
+    helper = MagicMock()
+    helper.is_directory = False
+    helper.event_type = "modified"
+    helper.src_path = os.path.join(main.PLUGIN_DIR, "web_parser", "link_cache.py")
+    handler.on_any_event(helper)
+    assert scheduled == []
+
+    handler.last_reload_time = 0
+    changed = MagicMock()
+    changed.is_directory = False
+    changed.event_type = "modified"
+    changed.src_path = os.path.join(main.PLUGIN_DIR, "echo.py")
+    handler.on_any_event(changed)
+    assert len(scheduled) == 1

@@ -6,7 +6,7 @@ import re
 from typing import Dict
 import datetime
 import sys
-from neobot.plugin_api import platform_command, platform_message, permission_manager, Permission, logger, image_manager, input_validator, define_plugin
+from neobot.plugin_api import platform_command, platform_message, permission_manager, Permission, logger, image_manager, input_validator, define_plugin, global_config
 from neobot.models.events.message import MessageEvent
 from neobot.models.message import MessageSegment
 
@@ -73,10 +73,19 @@ async def generate_and_send_code_image(event: MessageEvent, input_code: str, out
         # 降级为文本消息
         await event.reply(f"--- 你的代码 ---\n{input_code}\n--- 执行结果 ---\n{output_result}")
 
-async def sandbox_ready(event: MessageEvent) -> bool:
-    """沙箱没开或 Docker 不在时，给一句好懂的回复。"""
+async def sandbox_enabled(event: MessageEvent) -> bool:
+    """先看开关。关着的时候谁来都是同一句话，也不去碰 Docker。"""
     code_executor = getattr(event.bot, "code_executor", None)
     if code_executor is None or getattr(code_executor, "enabled", False) is not True:
+        await event.reply("代码沙箱歇着呢，现在不能跑 /py。")
+        return False
+    return True
+
+
+async def sandbox_runtime_ready(event: MessageEvent) -> bool:
+    """开关开着之后，才检查 Docker。这一步只给已经通过权限的人。"""
+    code_executor = getattr(event.bot, "code_executor", None)
+    if code_executor is None:
         await event.reply("代码沙箱歇着呢，现在不能跑 /py。")
         return False
     ready = await code_executor.ensure_ready()
@@ -84,6 +93,22 @@ async def sandbox_ready(event: MessageEvent) -> bool:
         await event.reply("沙箱想开工，但没连上 Docker，这次先不跑啦。")
         return False
     return True
+
+
+async def sandbox_ready(event: MessageEvent) -> bool:
+    """沙箱没开或 Docker 不在时，给一句好懂的回复。"""
+    if not await sandbox_enabled(event):
+        return False
+    return await sandbox_runtime_ready(event)
+
+
+async def _admin_may_run(event: MessageEvent) -> bool:
+    if await permission_manager.check_permission(event.user_id, Permission.ADMIN):
+        return True
+    permission_name = Permission.ADMIN.name if isinstance(Permission.ADMIN, Permission) else Permission.ADMIN
+    template = global_config.bot.permission_denied_message
+    await event.reply(template.format(permission_name=permission_name))
+    return False
 
 
 async def execute_code(event: MessageEvent, code: str):
@@ -379,14 +404,20 @@ def validate_code_security(code: str) -> bool:
     return True
 
 
-@platform_command(["qq", "discord"], "py", "python", "code_py", permission=Permission.ADMIN)
+@platform_command(["qq", "discord"], "py", "python", "code_py")
 async def code_py_main(event: MessageEvent, args: list[str]):
     """
     /py 命令的主入口。
     - 如果有参数，直接执行。
     - 如果没有参数，开启多行输入模式。
+
+    先看沙箱有没有开，再看是不是管理员。关着的时候不暴露运行状态。
     """
-    if not await sandbox_ready(event):
+    if not await sandbox_enabled(event):
+        return
+    if not await _admin_may_run(event):
+        return
+    if not await sandbox_runtime_ready(event):
         return
 
     code_to_run = " ".join(args)
@@ -426,15 +457,18 @@ async def handle_multi_line_code(event: MessageEvent):
     # 使用 getattr 兼容私聊和群聊
     session_key = (event.user_id, getattr(event, 'group_id', 'private'))
     if session_key in multi_line_sessions:
-        if not await sandbox_ready(event):
+        if not await sandbox_enabled(event):
             multi_line_sessions[session_key].cancel()
             del multi_line_sessions[session_key]
             return True
-        # 权限校验：仅管理员可执行代码（防御权限降级等边界情况）
-        if not await permission_manager.check_permission(event.user_id, Permission.ADMIN):
+        # 权限校验放在开关之后、Docker 探测之前，避免把运行状态告诉非管理员
+        if not await _admin_may_run(event):
             multi_line_sessions[session_key].cancel()
             del multi_line_sessions[session_key]
-            await event.reply("权限不足：仅管理员可执行代码，多行输入模式已取消。")
+            return True
+        if not await sandbox_runtime_ready(event):
+            multi_line_sessions[session_key].cancel()
+            del multi_line_sessions[session_key]
             return True
 
         # 取消超时任务

@@ -16,6 +16,7 @@ from ..config_loader import global_config
 from ..handlers.event_handler import MessageHandler, NoticeHandler, RequestHandler
 from .redis_manager import redis_manager
 from .image_manager import image_manager
+from ..help_pages import build_entries, resolve_help, template_data
 from ..utils.logger import logger
 
 # 从配置中获取命令前缀
@@ -63,37 +64,32 @@ class CommandManager:
         # 注册内置的 /help 命令
         self._register_internal_commands()
 
+    def _help_view(self, args=None):
+        return resolve_help(build_entries(self.plugins), list(args or []))
+
+    async def _render_help_image(self, view):
+        return await image_manager.render_template_to_base64(
+            template_name="help.html",
+            data=template_data(view),
+            output_name="help_menu.png",
+            image_type="png",
+            width=780,
+        )
+
     async def sync_help_pic(self):
         """
-        启动时或插件重载时同步 help 图片到 Redis
+        启动时或插件重载时同步帮助总览图到 Redis。
+        分类页和单插件页按请求现画，避免把全部用法叠成一张长图。
         """
         try:
             logger.info("正在生成帮助图片...")
-            
-            # 1. 收集插件数据
-            plugins_data = []
-            for plugin_name, meta in self.plugins.items():
-                plugins_data.append({
-                    "name": meta.get("name", plugin_name),
-                    "description": meta.get("description", "暂无描述"),
-                    "usage": meta.get("usage", "暂无用法")
-                })
-            
-            # 2. 渲染图片
-            # 使用 png 格式以获得更好的文字清晰度
-            base64_str = await image_manager.render_template_to_base64(
-                template_name="help.html",
-                data={"plugins": plugins_data},
-                output_name="help_menu.png",
-                image_type="png"
-            )
-            
+            view = self._help_view([])
+            base64_str = await self._render_help_image(view)
             if base64_str:
                 await redis_manager.set("neobot:core:help_pic", base64_str)
                 logger.success("帮助图片已更新并缓存到 Redis")
             else:
                 logger.error("帮助图片生成失败")
-                
         except Exception as e:
             logger.error(f"同步帮助图片失败: {e}")
 
@@ -102,11 +98,12 @@ class CommandManager:
         注册框架内置的命令
         """
         # Help 命令
-        self.message_handler.command("help")(self._help_command)
+        self.message_handler.command("help", "帮助")(self._help_command)
         self.plugins["core.help"] = {
             "name": "帮助",
             "description": "显示所有可用指令的帮助信息",
-            "usage": "/help",
+            "usage": "/help\n/help 娱乐\n/help 娱乐 2\n/help 天气",
+            "category": "系统",
         }
 
     def clear_all_handlers(self):
@@ -220,38 +217,42 @@ class CommandManager:
 
     # --- 内置命令实现 ---
 
-    async def _help_command(self, bot, event):
+    async def _help_command(self, bot, event, args=None):
         """
-        内置的 `/help` 命令的实现。
-        直接从 Redis 获取缓存的图片。
+        内置的 `/help` 命令。
+
+        无参数是分类总览；`/help 娱乐` 是这一类的指令；超高则 `/help 娱乐 2`；
+        `/help 天气` 是单个功能。图片画不出来时退回短文字。
         """
+        view = self._help_view(args)
+        if view.kind == "hint":
+            await bot.send(event, view.text)
+            return
+
+        use_cache = view.kind == "overview" and not list(args or [])
+        if use_cache:
+            try:
+                cached = await redis_manager.get("neobot:core:help_pic")
+                if cached:
+                    await bot.send(event, MessageSegment.image(cached))
+                    return
+            except Exception as exc:
+                logger.error(f"读取帮助图片缓存失败: {exc}")
+
         try:
-            # 1. 尝试从 Redis 获取
-            help_pic = await redis_manager.get("neobot:core:help_pic")
-            
-            if not help_pic:
-                await bot.send(event, "帮助图片缓存缺失，正在重新生成...")
-                await self.sync_help_pic()
-                help_pic = await redis_manager.get("neobot:core:help_pic")
-                
-            if help_pic:
-                await bot.send(event, MessageSegment.image(help_pic))
+            image = await self._render_help_image(view)
+            if image:
+                if use_cache:
+                    try:
+                        await redis_manager.set("neobot:core:help_pic", image)
+                    except Exception as exc:
+                        logger.error(f"写入帮助图片缓存失败: {exc}")
+                await bot.send(event, MessageSegment.image(image))
                 return
-        except Exception as e:
-            logger.error(f"获取或生成帮助图片失败: {e}")
+        except Exception as exc:
+            logger.error(f"获取或生成帮助图片失败: {exc}")
 
-        # 2. 最后的兜底：发送纯文本
-        help_text = "--- 可用指令列表 ---\n"
-        for plugin_name, meta in self.plugins.items():
-            name = meta.get("name", "未命名插件")
-            description = meta.get("description", "暂无描述")
-            usage = meta.get("usage", "暂无用法说明")
-
-            help_text += f"\n{name}:\n"
-            help_text += f"  功能: {description}\n"
-            help_text += f"  用法: {usage}\n"
-
-        await bot.send(event, help_text.strip())
+        await bot.send(event, view.plain_text())
 
 
 # 实例化全局唯一的命令管理器

@@ -7,9 +7,10 @@ import os
 import base64
 import tempfile
 from typing import Dict, Any, Optional
-from jinja2 import Template
+from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from .browser_manager import browser_manager
+from neobot.render_theme import DEVICE_SCALE
 from ..utils.logger import logger
 from ..utils.singleton import Singleton
 
@@ -31,8 +32,11 @@ class ImageManager(Singleton):
         # 临时文件目录 - 使用系统临时目录
         self.temp_dir = os.path.join(tempfile.gettempdir(), "neobot_images")
         os.makedirs(self.temp_dir, exist_ok=True)
-        # 模板缓存
-        self._template_cache: Dict[str, Template] = {}
+        # 模板可 {% include "theme.css" %}，样式集中在一份文件里。
+        self._env = Environment(
+            loader=FileSystemLoader(self.template_dir),
+            autoescape=select_autoescape(["html", "xml"]),
+        )
 
     async def render_template(self, template_name: str, data: Dict[str, Any], output_name: str = "output.png", quality: int = 80, image_type: str = "png", width: int = 1920, height: int = 1080) -> Optional[str]:
         """
@@ -56,48 +60,60 @@ class ImageManager(Singleton):
             return None
 
         try:
-            # 1. 渲染 HTML (使用缓存)
-            if template_name in self._template_cache:
-                template = self._template_cache[template_name]
-            else:
-                with open(template_path, "r", encoding="utf-8") as f:
-                    template_str = f.read()
-                template = Template(template_str)
-                self._template_cache[template_name] = template
-            
+            template = self._env.get_template(template_name)
             html_content = template.render(**data)
 
-            # 2. 使用浏览器截图
-            # 改为从池中获取页面
-            page = await browser_manager.get_page()
-            if not page:
+            # 单独开一个 2 倍缩放的页面，按内容高度截图。不占用页面池。
+            if browser_manager._browser is None:
+                await browser_manager.initialize()
+            browser = browser_manager._browser
+            if browser is None:
                 logger.error("无法获取浏览器页面")
                 return None
 
+            width = int(data.get("width", width) or width)
+            viewport_width = max(width, 320)
+            context = await browser.new_context(
+                viewport={"width": viewport_width, "height": 1200},
+                device_scale_factor=DEVICE_SCALE,
+            )
             try:
-                width = data.get("width", width)
-                height = data.get("height", height)
-                await page.set_viewport_size({"width": width, "height": height})
-                
-                # 加载内容
-                await page.set_content(html_content)
+                page = await context.new_page()
+                await page.set_content(html_content, wait_until="domcontentloaded")
                 await page.wait_for_selector("body")
-                
-                
+                try:
+                    await page.evaluate("async () => { if (document.fonts) await document.fonts.ready }")
+                except Exception:
+                    pass
+
+                box = await page.evaluate("""() => {
+                    const el = document.querySelector('.nb-page') || document.body;
+                    const rect = el.getBoundingClientRect();
+                    return {
+                        width: Math.ceil(rect.width),
+                        height: Math.ceil(Math.max(rect.height, el.scrollHeight)),
+                    };
+                }""")
+                content_width = max(int(box.get("width") or viewport_width), 1)
+                content_height = max(int(box.get("height") or 1), 1)
+                await page.set_viewport_size({
+                    "width": max(content_width, viewport_width),
+                    "height": content_height,
+                })
+
+                locator = page.locator(".nb-page")
+                if await locator.count() == 0:
+                    locator = page.locator("body")
                 screenshot_args = {
-                    'full_page': True, 
-                    'type': image_type,
-                    'omit_background': False,
-                    'scale': 'css'
+                    "type": image_type,
+                    "omit_background": False,
+                    "scale": "device",
                 }
-                if image_type == 'jpeg':
-                    screenshot_args['quality'] = quality
-                    
-                screenshot_bytes = await page.screenshot(**screenshot_args)  # type: ignore
-                
+                if image_type == "jpeg":
+                    screenshot_args["quality"] = quality
+                screenshot_bytes = await locator.screenshot(**screenshot_args)  # type: ignore
             finally:
-                # 归还页面到池中，而不是直接关闭
-                await browser_manager.release_page(page)
+                await context.close()
 
             # 3. 保存文件
             output_path = os.path.join(self.temp_dir, output_name)

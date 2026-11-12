@@ -32,6 +32,10 @@ from neobot.adapters.discord_adapter import DiscordAdapter
 # 获取插件目录的绝对路径
 PLUGIN_DIR = os.path.join(ROOT_DIR, "src", "neobot", "plugins")
 
+# 这些模块被插件 import，自己不是插件。改动它们不该触发热重载。
+_HELPER_MODULE_STEMS = {"link_cache"}
+_RELOAD_EVENT_TYPES = {"modified", "created", "moved"}
+
 
 def plugin_module_name_from_path(src_path: str) -> str | None:
     """把插件源文件路径解析成 ``neobot.plugins...`` 模块名。
@@ -42,6 +46,9 @@ def plugin_module_name_from_path(src_path: str) -> str | None:
     if not src_path.endswith(".py"):
         return None
     if "__pycache__" in src_path or not src_path.startswith(PLUGIN_DIR):
+        return None
+    stem = os.path.splitext(os.path.basename(src_path))[0]
+    if stem in _HELPER_MODULE_STEMS:
         return None
     relative_path = os.path.relpath(src_path, SRC_DIR)
     module_name = os.path.splitext(relative_path.replace(os.sep, "."))[0]
@@ -79,6 +86,7 @@ class PluginReloadHandler(FileSystemEventHandler):
         self.loop = loop
         self.last_reload_time = 0
         self.cooldown = 1.0  # 冷却时间，防止短时间内多次重载
+        self._recent_paths: dict[str, float] = {}
 
     def on_any_event(self, file_system_event):
         """
@@ -88,18 +96,24 @@ class PluginReloadHandler(FileSystemEventHandler):
         """
         if file_system_event.is_directory:
             return
+        event_type = getattr(file_system_event, "event_type", "modified")
+        if event_type not in _RELOAD_EVENT_TYPES:
+            return
         
         src_path = file_system_event.src_path
         module_name = plugin_module_name_from_path(src_path)
         if not module_name:
             return
 
-        # 简单的防抖动
+        # 按文件防抖动。打开、关闭这类事件不代表内容变了，上面已经丢掉。
         current_time = time.time()
         if current_time - self.last_reload_time < self.cooldown:
             return
+        if current_time - self._recent_paths.get(src_path, 0.0) < self.cooldown:
+            return
         
         self.last_reload_time = current_time
+        self._recent_paths[src_path] = current_time
         
         # 模块名以 SRC_DIR 为基准，得到 `neobot.plugins.x`，
         # 与 sys.modules 中的键一致。例如:

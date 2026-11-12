@@ -5,6 +5,7 @@ import asyncio
 import html
 import math
 import re
+import unicodedata
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
@@ -213,18 +214,45 @@ def one_line(text: str, limit: int = SUMMARY_LIMIT) -> str:
 
 
 def _normalize(title: str) -> str:
-    return _PUNCT_RE.sub("", strip_html(title)).lower()
+    text = unicodedata.normalize("NFKC", strip_html(title or ""))
+    return _PUNCT_RE.sub("", text).casefold()
+
+
+def _bigrams(text: str) -> set[str]:
+    if len(text) < 2:
+        return {text} if text else set()
+    return {text[index:index + 2] for index in range(len(text) - 1)}
+
+
+def _dice(left: str, right: str) -> float:
+    a, b = _bigrams(left), _bigrams(right)
+    if not a or not b:
+        return 0.0
+    return (2 * len(a & b)) / (len(a) + len(b))
+
+
+def _different_lead_subject(left: str, right: str) -> bool:
+    """开头两个字不同、后面几乎一样时，多半是换了城市的套话，不当成同一条。"""
+    if len(left) < 6 or len(right) < 6 or left[:2] == right[:2]:
+        return False
+    return SequenceMatcher(None, left[2:], right[2:]).ratio() >= 0.85
 
 
 def titles_similar(left: str, right: str, threshold: float = 0.72) -> bool:
     a, b = _normalize(left), _normalize(right)
     if not a or not b:
         return False
+    if _different_lead_subject(a, b):
+        return False
     if a == b or a in b or b in a:
         short, long = sorted((a, b), key=len)
         if a == b or (len(short) >= 6 and len(short) / len(long) >= 0.6):
             return True
-    return SequenceMatcher(None, a, b).ratio() >= threshold
+    if SequenceMatcher(None, a, b).ratio() >= threshold:
+        return True
+    # 语序对调的同一件事（例如「7人死亡！纽约一栋建筑倒塌」和「纽约建筑倒塌已致7人死亡」）
+    # 字符二元组仍大量重合。各栏目共用这份判断，避免国际和国内各发一遍。
+    return min(len(a), len(b)) >= 8 and _dice(a, b) >= 0.55
 
 
 def _local_name(tag: str) -> str:
@@ -557,7 +585,12 @@ async def _feature_on(feature_enabled, group_id: int) -> bool:
         from neobot.plugins.group_manage import is_feature_enabled
         feature_enabled = is_feature_enabled
     try:
-        return bool(await feature_enabled(group_id))
+        return bool(await feature_enabled(group_id, "daily_news"))
+    except TypeError:
+        try:
+            return bool(await feature_enabled(group_id))
+        except Exception:
+            return True
     except Exception:
         return True
 

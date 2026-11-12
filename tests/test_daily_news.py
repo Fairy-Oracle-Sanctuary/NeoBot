@@ -468,6 +468,100 @@ async def _ok(_group_id):
     return True
 
 
+def test_near_duplicate_titles_collapse_across_sections():
+    """同一件事换了标点和语序，也不该在早报里出现两次。"""
+    from neobot.plugins.daily_news import assemble_digest, titles_similar
+
+    left = "7人死亡！纽约一栋建筑倒塌"
+    right = "纽约建筑倒塌已致7人死亡"
+    assert titles_similar(left, right)
+    assert titles_similar("纽约：高层建筑　倒塌！！", "纽约高层建筑倒塌")
+    assert not titles_similar("北京今日发布大风预警", "上海今日发布大风预警")
+    assert not titles_similar("中美举行经贸会谈", "欧洲多国遭遇强降雨")
+
+    world = """<?xml version="1.0" encoding="utf-8"?>
+<rss><channel><item>
+  <title>7人死亡！纽约一栋建筑倒塌</title>
+  <link>https://example.com/world/nyc</link>
+  <description>救援仍在进行。</description>
+  <pubDate>Fri, 13 Nov 2026 07:40:00 +0800</pubDate>
+</item></channel></rss>"""
+    domestic = """<?xml version="1.0" encoding="utf-8"?>
+<rss><channel><item>
+  <title>纽约建筑倒塌已致7人死亡</title>
+  <link>https://example.com/cn/nyc</link>
+  <description>现场已封锁。</description>
+  <pubDate>Fri, 13 Nov 2026 07:48:00 +0800</pubDate>
+</item></channel></rss>"""
+    settings = _settings()
+    text = assemble_digest(
+        settings,
+        [
+            (settings.sources[0], world),
+            (settings.sources[1], domestic),
+        ],
+        NOW,
+    )
+    assert text is not None
+    assert text.count("纽约") == 1
+    assert "建筑倒塌" in text
+
+
+@pytest.mark.asyncio
+async def test_group_switch_disables_daily_news_feature():
+    """/群管 关 早报 之后，定时和手动都不该再发。"""
+    from neobot.plugins import daily_news, group_manage
+
+    settings = _settings()
+    sent: list[int] = []
+
+    async def sender(group_id, text, _settings):
+        sent.append(group_id)
+        return True
+
+    store = {(group_manage._settings_key(PLACEHOLDER_GROUP), "daily_news"): "0"}
+
+    class _Hash:
+        async def hget(self, key, field):
+            return store.get((key, field))
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(group_manage.redis_manager, "_redis", _Hash())
+    try:
+        count = await daily_news.scheduled_push(
+            now=NOW,
+            fetch=_feeds(),
+            sender=sender,
+            settings=settings,
+            client=FakeRedis(),
+        )
+        assert count == 0
+        assert sent == []
+
+        event = MagicMock()
+        event.group_id = PLACEHOLDER_GROUP
+        event.reply = AsyncMock()
+        bot = MagicMock()
+        bot.send_group_msg = AsyncMock()
+        bot.send_group_forward_msg = AsyncMock()
+        bot.self_id = 10000
+        await daily_news.manual_push(
+            bot,
+            event,
+            now=NOW,
+            fetch=_feeds(),
+            settings=settings,
+            client=FakeRedis(),
+        )
+    finally:
+        monkeypatch.undo()
+
+    assert event.reply.await_args is not None
+    assert "关掉" in event.reply.await_args.args[0]
+    bot.send_group_msg.assert_not_called()
+    bot.send_group_forward_msg.assert_not_called()
+
+
 def test_command_is_in_fuzzy_vocabulary_and_pig_commands_stay_ignored():
     from neobot.core.managers.command_manager import matcher
     from neobot.plugins import daily_news
